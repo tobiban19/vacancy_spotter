@@ -186,3 +186,32 @@ async def test_telegram_stars_handlers(async_client: AsyncClient):
     assert sub.is_valid is True
     mock_msg.answer.assert_called_once()
     assert "Спасибо за оплату Telegram Stars!" in mock_msg.answer.call_args.args[0]
+
+
+@pytest.mark.asyncio
+async def test_menu_subscription_and_help_callbacks(async_client: AsyncClient):
+    user_id = 9005
+    await api.repo.get_or_create_user({"id": user_id, "first_name": "MenuTestUser"})
+
+    # Test menu_subscription
+    mock_query_sub = AsyncMock()
+    mock_query_sub.from_user.id = user_id
+    mock_query_sub.data = "menu_subscription"
+    mock_query_sub.message = AsyncMock()
+
+    await bot_service.process_menu_subscription(mock_query_sub)
+    mock_query_sub.answer.assert_called_once()
+    mock_query_sub.message.answer.assert_called_once()
+    assert "Управление подпиской" in mock_query_sub.message.answer.call_args.args[0]
+
+    # Test menu_help
+    mock_query_help = AsyncMock()
+    mock_query_help.from_user.id = user_id
+    mock_query_help.data = "menu_help"
+    mock_query_help.message = AsyncMock()
+
+    await bot_service.process_menu_help(mock_query_help)
+    mock_query_help.answer.assert_called_once()
+    mock_query_help.message.answer.assert_called_once()
+    assert "Инструкция по работе" in mock_query_help.message.answer.call_args.args[0]
+

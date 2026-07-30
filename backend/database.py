@@ -245,7 +245,14 @@ class DatabaseRepository:
         bio_summary = r_row["bio_summary"] if r_row else ""
 
         demo_until = datetime.fromisoformat(u_row["demo_until"])
-        sub_until = datetime.fromisoformat(u_row["subscription_until"]) if u_row["subscription_until"] else None
+        if demo_until.tzinfo is None:
+            demo_until = demo_until.replace(tzinfo=timezone.utc)
+
+        sub_until = None
+        if u_row["subscription_until"]:
+            sub_until = datetime.fromisoformat(u_row["subscription_until"])
+            if sub_until.tzinfo is None:
+                sub_until = sub_until.replace(tzinfo=timezone.utc)
 
         return UserProfileDTO(
             user_id=u_row["id"],
@@ -495,7 +502,14 @@ class DatabaseRepository:
             )
         now = datetime.now(timezone.utc)
         demo_until = datetime.fromisoformat(row["demo_until"])
-        sub_until = datetime.fromisoformat(row["subscription_until"]) if row["subscription_until"] else None
+        if demo_until.tzinfo is None:
+            demo_until = demo_until.replace(tzinfo=timezone.utc)
+
+        sub_until = None
+        if row["subscription_until"]:
+            sub_until = datetime.fromisoformat(row["subscription_until"])
+            if sub_until.tzinfo is None:
+                sub_until = sub_until.replace(tzinfo=timezone.utc)
 
         if sub_until and sub_until > now:
             status = "active"

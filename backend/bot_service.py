@@ -148,6 +148,7 @@ async def cmd_start(message: Message) -> None:
 
 @router.callback_query(F.data == "menu_subscription")
 async def process_menu_subscription(query: CallbackQuery) -> None:
+    await query.answer()
     if not query.from_user:
         return
     if repo._conn is None:
@@ -156,7 +157,7 @@ async def process_menu_subscription(query: CallbackQuery) -> None:
     user_id = query.from_user.id
     sub = await repo.get_subscription_status(user_id)
 
-    status_str = "✅ Активна (PRO)" if sub.is_valid and sub.status == "active" else ("⚡ Демо-доступ (2 дня)" if sub.is_valid else "❌ Истёк")
+    status_str = "✅ Активна" if sub.is_valid and sub.status == "active" else ("⚡ Демо-доступ (2 дня)" if sub.is_valid else "❌ Истёк")
     until_str = sub.subscription_until.strftime("%d.%m.%Y %H:%M") if sub.subscription_until else (sub.demo_until.strftime("%d.%m.%Y %H:%M") if sub.demo_until else "Не активирована")
 
     text = (
@@ -165,8 +166,8 @@ async def process_menu_subscription(query: CallbackQuery) -> None:
         f"• Осталось дней: <b>{sub.days_left}</b>\n"
         f"• Действует до: <b>{until_str} UTC</b>\n\n"
         f"<b>Тарифы на продление:</b>\n"
-        f"• <b>PROНеделя</b> (7 дней): 300 ₽\n"
-        f"• <b>PROМесяц</b> (30 дней): 600 ₽ (Выгода!)\n\n"
+        f"• <b>Неделя</b> (7 дней): 300 ₽\n"
+        f"• <b>Месяц</b> (30 дней): 600 ₽ (Выгода!)\n\n"
         f"<i>Для оплаты переводом на карту нажмите кнопку ниже:</i>"
     )
 
@@ -180,13 +181,13 @@ async def process_menu_subscription(query: CallbackQuery) -> None:
             ]
         ]
     )
-    await query.answer()
     if query.message and hasattr(query.message, "answer"):
         await query.message.answer(text, parse_mode=ParseMode.HTML, reply_markup=kb)
 
 
 @router.callback_query(F.data == "menu_help")
 async def process_menu_help(query: CallbackQuery) -> None:
+    await query.answer()
     help_text = (
         "📖 <b>Инструкция по работе с Vacancy Spotter SaaS:</b>\n\n"
         "1️⃣ <b>Настройка профиля:</b>\n"
@@ -208,7 +209,6 @@ async def process_menu_help(query: CallbackQuery) -> None:
             ]
         ]
     )
-    await query.answer()
     if query.message and hasattr(query.message, "answer"):
         await query.message.answer(help_text, parse_mode=ParseMode.HTML, reply_markup=kb)
 

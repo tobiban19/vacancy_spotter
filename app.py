@@ -31,7 +31,7 @@ def start_services_in_thread():
         server = uvicorn.Server(config)
 
         server_task = asyncio.create_task(server.serve())
-        polling_task = asyncio.create_task(dp.start_polling(bot))
+        polling_task = asyncio.create_task(dp.start_polling(bot, handle_signals=False))
 
         print("🚀 Vacancy Spotter SaaS Backend & Bot started in Gradio Space!")
         try:

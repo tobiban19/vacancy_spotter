@@ -14,7 +14,6 @@ import {
   Check,
   Send,
   CheckCircle2,
-  HelpCircle,
   Upload,
   ShieldCheck,
   Zap,
@@ -212,7 +211,7 @@ export function App() {
     });
 
     return {
-      title: isDemo ? 'Демо Доступ (2 дня)' : 'PRO Подписка',
+      title: isDemo ? 'Демо Доступ (2 дня)' : 'Подписка',
       status: isDemo ? 'demo' : 'active',
       daysLeft,
       formattedUntil: dateFormatted,
@@ -654,18 +653,6 @@ export function App() {
             <h1 className="font-heading text-xl font-bold gradient-header-text">
               Vacancy Spotter
             </h1>
-            <button
-              type="button"
-              onClick={() => {
-                triggerHaptic('light');
-                setShowInstructions(true);
-              }}
-              className="text-[11px] bg-[#B2DAE4]/40 hover:bg-[#B2DAE4]/70 text-[#005BB3] border border-[#005BB3]/20 px-2.5 py-0.5 rounded-full font-medium flex items-center gap-1 transition-all hover:scale-105"
-              title="Открыть инструкцию"
-            >
-              <HelpCircle size={13} />
-              <span>Инструкция</span>
-            </button>
           </div>
           <p className="font-body text-xs text-slate-500">
             Привет, {tgUser?.first_name || profile?.first_name || 'Пользователь'} 👋
@@ -1107,7 +1094,7 @@ export function App() {
                       <span className="font-body text-[10px] font-bold tracking-wider px-2 py-0.5 rounded bg-[#005BB3]/15 text-[#005BB3] uppercase">
                         7 Дней
                       </span>
-                      <h3 className="font-heading font-bold text-base text-slate-900 mt-2">PROНеделя</h3>
+                      <h3 className="font-heading font-bold text-base text-slate-900 mt-2">Неделя</h3>
                       <p className="font-body text-xs text-slate-500 mt-1">Тест-драйв функций</p>
                     </div>
                     <div className="mt-4 pt-3 border-t border-slate-200">
@@ -1116,7 +1103,7 @@ export function App() {
                     </div>
                   </div>
 
-                  {/* PRO Месяц */}
+                  {/* Месяц */}
                   <div
                     onClick={() => {
                       triggerHaptic('light');
@@ -1140,7 +1127,7 @@ export function App() {
                       <span className="font-body text-[10px] font-bold tracking-wider px-2 py-0.5 rounded bg-[#F86A38]/15 text-[#e04e1b] uppercase">
                         30 Дней
                       </span>
-                      <h3 className="font-heading font-bold text-base text-slate-900 mt-2">PROМесяц</h3>
+                      <h3 className="font-heading font-bold text-base text-slate-900 mt-2">Месяц</h3>
                       <p className="font-body text-xs text-slate-500 mt-1">Полный авто-отклик</p>
                     </div>
                     <div className="mt-4 pt-3 border-t border-slate-200">
@@ -1156,7 +1143,7 @@ export function App() {
                     <div>
                       <span className="text-xs text-slate-500">Выбранный тариф:</span>
                       <h4 className="font-heading text-sm font-bold text-slate-900">
-                        {selectedPlan === 'week' ? 'PROНеделя (300 ₽ на 7 дней)' : 'PROМесяц (600 ₽ на 30 дней)'}
+                        {selectedPlan === 'week' ? 'Неделя (300 ₽ на 7 дней)' : 'Месяц (600 ₽ на 30 дней)'}
                       </h4>
                     </div>
                     <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-[#005BB3]/10 text-[#005BB3] border border-[#005BB3]/20">
@@ -1263,7 +1250,7 @@ export function App() {
                       ) : (
                         <>
                           <Send size={15} />
-                          <span>Я перевёл (Отправить запрос админу)</span>
+                          <span>Я перевёл</span>
                         </>
                       )}
                     </button>

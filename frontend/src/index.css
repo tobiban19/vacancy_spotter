@@ -97,8 +97,6 @@
   }
 
   .gradient-header-text {
-    background: linear-gradient(135deg, #005BB3 0%, #D8226C 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+    color: #D8226C;
   }
 }
