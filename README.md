@@ -3,8 +3,10 @@ title: Vacancy Spotter SaaS Backend
 emoji: 🚀
 colorFrom: blue
 colorTo: indigo
-sdk: docker
-app_port: 7860
+sdk: gradio
+sdk_version: 4.21.0
+app_file: app.py
+pinned: false
 short_description: Vacancy Spotter SaaS Backend & Telegram Bot 24/7
 ---
 
