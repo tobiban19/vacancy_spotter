@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: vacancy-spotter-backend
+    env: python
+    region: frankfurt
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: python server.py
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        value: sqlite+aiosqlite:///./data/saas_spotter.sqlite3
+      - key: DEMO_DURATION_DAYS
+        value: "2"
