@@ -155,7 +155,7 @@ export function App() {
         receiptFile?.b64,
         receiptFile?.name,
       );
-      showToast('🎉 Чек и запрос отправлены администратору! Подписка активируется после проверки.', 'success');
+      showToast('Отправили чек администратору. Проверим перевод и активируем подписку в течение 15 минут.', 'success');
       setReceiptInfo('');
       setReceiptFile(null);
     } catch (err: any) {
@@ -170,7 +170,7 @@ export function App() {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.name.toLowerCase().endsWith('.pdf')) {
-      showToast('Пожалуйста, выберите файл формата PDF', 'error');
+      showToast('Выберите файл формата PDF', 'error');
       return;
     }
     setUploadingPdf(true);
@@ -179,7 +179,7 @@ export function App() {
       const res = await api.parseResumePdf(file);
       if (res.extracted_text) {
         setBioSummary((prev) => (prev ? `${prev}\n\n${res.extracted_text}` : res.extracted_text));
-        showToast('📄 Резюме извлечено! Навыки и опыт добавлены в профиль.', 'success');
+        showToast('Прочитали PDF. Добавили навыки и опыт в профиль.', 'success');
       }
     } catch (err: any) {
       console.error('PDF upload error:', err);
@@ -433,17 +433,17 @@ export function App() {
             {/* Header */}
             <div className="text-center space-y-1">
               <span className="text-[10px] font-bold tracking-wider px-2.5 py-0.5 rounded-full bg-[#B2DAE4]/30 text-[#005BB3] border border-[#005BB3]/20 uppercase font-body">
-                Быстрый старт (Шаг {onboardingStep} из 3)
+                Настройка профиля (Шаг {onboardingStep} из 3)
               </span>
               <h3 className="font-heading text-base font-bold text-slate-900 pt-1">
-                {onboardingStep === 1 && '🎬 Выберите вашу профессию'}
-                {onboardingStep === 2 && '⚡ Опыт работы и фильтры'}
-                {onboardingStep === 3 && '💼 Первый кейс в портфолио'}
+                {onboardingStep === 1 && 'Выберите профессию'}
+                {onboardingStep === 2 && 'Опыт работы и фильтры'}
+                {onboardingStep === 3 && 'Первый проект в портфолио'}
               </h3>
               <p className="font-body text-xs text-slate-500">
-                {onboardingStep === 1 && 'Бот будет искать вакансии специально по вашей специальности.'}
-                {onboardingStep === 2 && 'Укажите ваш стаж и нежелательные слова.'}
-                {onboardingStep === 3 && 'При отклике ИИ прикрепит эту работу.'}
+                {onboardingStep === 1 && 'Бот ищет вакансии по вашей специальности.'}
+                {onboardingStep === 2 && 'Укажите стаж и слова для фильтрации.'}
+                {onboardingStep === 3 && 'Нейросеть будет прикладывать этот проект к отклику.'}
               </p>
             </div>
 
@@ -486,15 +486,15 @@ export function App() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium font-body text-slate-700 mb-1">Исключать отклики со словами:</label>
+                  <label className="block text-xs font-medium font-body text-slate-700 mb-1">Стоп-слова (пропускать вакансии со словами):</label>
                   <input
                     type="text"
                     value={newStopWord}
                     onChange={(e) => setNewStopWord(e.target.value)}
-                    placeholder="бартер, Adobe, тесты..."
+                    placeholder="бартер, бесплатно, стажёр"
                     className="w-full bg-slate-50 text-slate-900 p-2.5 rounded-lg border border-slate-200 text-xs font-body focus:outline-none focus:border-[#005BB3] focus:bg-white"
                   />
-                  <p className="text-[10px] text-slate-500 mt-1 font-body">Несколько слов можно указать через запятую</p>
+                  <p className="text-[10px] text-slate-500 mt-1 font-body">Указывайте слова через запятую</p>
                 </div>
               </div>
             )}
@@ -503,17 +503,17 @@ export function App() {
             {onboardingStep === 3 && (
               <div className="space-y-3">
                 <div>
-                  <label className="block text-xs font-medium font-body text-slate-700 mb-1">Название проекта / ролика:</label>
+                  <label className="block text-xs font-medium font-body text-slate-700 mb-1">Название проекта:</label>
                   <input
                     type="text"
                     value={portTitle}
                     onChange={(e) => setPortTitle(e.target.value)}
-                    placeholder="Монтаж промо / Showreel 2026"
+                    placeholder="Showreel 2026 или Проморолик"
                     className="w-full bg-slate-50 text-slate-900 p-2.5 rounded-lg border border-slate-200 text-xs font-body focus:outline-none focus:border-[#005BB3] focus:bg-white"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium font-body text-slate-700 mb-1">Ссылка на видео / Behance / TG:</label>
+                  <label className="block text-xs font-medium font-body text-slate-700 mb-1">Ссылка на проект (YouTube, Behance, Диск):</label>
                   <input
                     type="url"
                     value={portUrl}
@@ -557,13 +557,13 @@ export function App() {
                         await api.addPortfolioItem({
                           title: portTitle.trim(),
                           url: portUrl.trim(),
-                          description: 'Кейс из мастера настройки',
+                          description: 'Проект из мастера настройки',
                           category: 'general',
                         });
                       }
                       localStorage.setItem('spotter_onboarding_done', 'true');
                       setShowOnboarding(false);
-                      showToast('🎉 Профиль настроен! Вам активирован 2 дня БЕСПЛАТНОГО PRO-доступа.', 'success');
+                      showToast('Настроили профиль. Включили PRO-доступ на 2 дня.', 'success');
                       loadInitialData();
                     } catch (err) {
                       console.error('Onboarding save error:', err);
@@ -573,7 +573,7 @@ export function App() {
                 }}
                 className="flex-1 bg-gradient-to-r from-[#005BB3] to-[#D8226C] hover:from-[#004b94] hover:to-[#b81b5b] text-white py-2.5 rounded-xl text-xs font-bold font-body transition-all hover:-translate-y-0.5 active:translate-y-0 shadow-md shadow-[#005BB3]/20"
               >
-                {onboardingStep === 3 ? '🚀 Начать поиск заказов' : 'Далее →'}
+                {onboardingStep === 3 ? 'Сохранить и начать поиск' : 'Далее →'}
               </button>
             </div>
           </div>
@@ -586,7 +586,7 @@ export function App() {
           <div className="bg-white rounded-2xl p-5 max-w-sm w-full space-y-4 shadow-xl animate-fadeIn border border-[#B2DAE4]/60 max-h-[85vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-100 pb-2">
               <h3 className="font-heading text-base font-bold text-slate-900 flex items-center gap-2">
-                📖 Инструкция к Vacancy Spotter
+                Как работает Vacancy Spotter
               </h3>
               <button
                 type="button"
@@ -600,37 +600,37 @@ export function App() {
             <div className="space-y-3 font-body text-xs text-slate-700">
               <div className="p-3 bg-[#005BB3]/5 border border-[#005BB3]/20 rounded-xl space-y-1">
                 <div className="font-bold text-[#005BB3] flex items-center gap-1.5 text-sm">
-                  1️⃣ Настройки Профиля и Фильтров
+                  1. Настройка профиля и стоп-слов
                 </div>
                 <p className="text-slate-600">
-                  Выберите вашу специализацию (например, <b>Веб-дизайнер</b> или <b>Видеомонтажёр</b>) и укажите стоп-слова. Бот автоматически отсеет неподходящие заказы.
+                  Выберите вашу специализацию и укажите стоп-слова. Бот автоматически пропустит вакансии, где есть эти слова.
                 </p>
               </div>
 
               <div className="p-3 bg-[#D8226C]/5 border border-[#D8226C]/20 rounded-xl space-y-1">
                 <div className="font-bold text-[#D8226C] flex items-center gap-1.5 text-sm">
-                  2️⃣ Загрузка Резюме (PDF)
+                  2. Загрузка резюме в PDF
                 </div>
                 <p className="text-slate-600">
-                  Нажмите <b>«Извлечь из PDF»</b> в профиле — бот автоматически распознает ваш опыт и составит персонализированные ИИ-отклики.
+                  Нажмите <b>«Извлечь из PDF»</b> в профиле — бот сам прочитает ваш опыт и учтёт его при подготовке откликов.
                 </p>
               </div>
 
               <div className="p-3 bg-[#F86A38]/5 border border-[#F86A38]/20 rounded-xl space-y-1">
                 <div className="font-bold text-[#e04e1b] flex items-center gap-1.5 text-sm">
-                  3️⃣ Кейсы в Портфолио
+                  3. Проекты в портфолио
                 </div>
                 <p className="text-slate-600">
-                  Добавьте ссылки на проекты (YouTube, Behance, Диск). ИИ прикрепит подходящие примеры работ к вашему ответу заказчику.
+                  Прикрепите ссылки на проекты (YouTube, Behance, Диск). Бот подберёт под каждую вакансию наиболее подходящие примеры.
                 </p>
               </div>
 
               <div className="p-3 bg-[#029456]/5 border border-[#029456]/20 rounded-xl space-y-1">
                 <div className="font-bold text-[#029456] flex items-center gap-1.5 text-sm">
-                  4️⃣ Горячие Вакансии в Личку!
+                  4. Проверка и отправка откликов
                 </div>
                 <p className="text-slate-600">
-                  Как только в каналах появится свежая вакансия, бот пришлёт вам карточку с кнопкой <b>«✅ Одобрить & Откликнуться»</b>.
+                  Когда появится подходящая вакансия, бот пришлёт готовый отклик. Вам останется нажать <b>«Отправить отклик»</b>.
                 </p>
               </div>
             </div>
@@ -640,7 +640,7 @@ export function App() {
               onClick={() => setShowInstructions(false)}
               className="w-full bg-gradient-to-r from-[#005BB3] to-[#D8226C] hover:from-[#004b94] hover:to-[#b81b5b] text-white py-2.5 rounded-xl font-bold text-xs shadow-md"
             >
-              Всё понятно, к работе 🚀
+              Понятно
             </button>
           </div>
         </div>
@@ -854,7 +854,7 @@ export function App() {
                       rows={4}
                       value={bioSummary}
                       onChange={(e) => setBioSummary(e.target.value)}
-                      placeholder="Опишите ваши сильные стороны или нажмите «Извлечь из PDF» для быстрой загрузки резюме..."
+                      placeholder="Опишите ваш опыт, ключевые навыки и проекты или загрузите резюме в PDF..."
                       className="w-full bg-slate-50 text-slate-900 p-2.5 rounded-lg border border-slate-200 focus:outline-none focus:border-[#005BB3] focus:bg-white text-xs font-body resize-none"
                     />
                   </div>
@@ -869,7 +869,7 @@ export function App() {
                         <Loader2 className="animate-spin" size={16} /> Сохранение...
                       </>
                     ) : (
-                      'Сохранить профиль'
+                      'Сохранить изменения'
                     )}
                   </button>
                 </div>
@@ -881,7 +881,7 @@ export function App() {
               <div className="space-y-4 animate-fadeIn">
                 <div className="flex items-center justify-between">
                   <h2 className="font-heading text-lg font-semibold flex items-center gap-2 text-slate-900">
-                    <Briefcase size={20} className="text-[#005BB3]" /> Портфолио & Кейсы
+                    <Briefcase size={20} className="text-[#005BB3]" /> Портфолио и проекты
                   </h2>
                   <button
                     onClick={() => {
@@ -901,7 +901,7 @@ export function App() {
                     onSubmit={handleAddPortfolio}
                     className="glass-card border-[#005BB3]/30 p-4 rounded-xl space-y-3 shadow-md animate-fadeIn font-body"
                   >
-                    <h3 className="font-heading text-sm font-semibold text-[#D8226C]">Новый кейс в портфолио</h3>
+                    <h3 className="font-heading text-sm font-semibold text-[#D8226C]">Новый проект</h3>
                     <div>
                       <label className="block text-xs text-slate-700 mb-1 font-medium">Название проекта *</label>
                       <input
@@ -909,12 +909,12 @@ export function App() {
                         required
                         value={portTitle}
                         onChange={(e) => setPortTitle(e.target.value)}
-                        placeholder="Например: Showreel 2026 или Промо ролик"
+                        placeholder="Showreel 2026 или Проморолик"
                         className="w-full bg-slate-50 text-slate-900 p-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#005BB3] focus:bg-white text-xs font-body"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-slate-700 mb-1 font-medium">Ссылка на работу (YouTube / Drive / Behance) *</label>
+                      <label className="block text-xs text-slate-700 mb-1 font-medium">Ссылка на проект (YouTube, Behance, Диск) *</label>
                       <input
                         type="url"
                         required
@@ -925,12 +925,12 @@ export function App() {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-slate-700 mb-1 font-medium">Краткое описание</label>
+                      <label className="block text-xs text-slate-700 mb-1 font-medium">Описание проекта</label>
                       <textarea
                         rows={2}
                         value={portDesc}
                         onChange={(e) => setPortDesc(e.target.value)}
-                        placeholder="Опишите задачи и результат..."
+                        placeholder="Какие задачи решили и какого результата достигли..."
                         className="w-full bg-slate-50 text-slate-900 p-2 rounded-lg border border-slate-200 focus:outline-none focus:border-[#005BB3] focus:bg-white text-xs font-body resize-none"
                       />
                     </div>
@@ -940,7 +940,7 @@ export function App() {
                       className="w-full font-body bg-[#005BB3] hover:bg-[#004b94] hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 text-white font-medium py-2 rounded-lg transition-all text-xs shadow-sm flex items-center justify-center gap-1.5"
                     >
                       {addingPortfolio ? <Loader2 className="animate-spin" size={14} /> : <Plus size={14} />}
-                      Сохранить кейс
+                      Сохранить проект
                     </button>
                   </form>
                 )}
@@ -952,9 +952,9 @@ export function App() {
                       <Briefcase size={24} />
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-slate-800">Примеры лучших работ не добавлены</p>
+                      <p className="text-sm font-medium text-slate-800">Вы ещё не добавили проекты</p>
                       <p className="text-xs text-slate-500 mt-1">
-                        Добавьте ссылки на кейсы, YouTube/Google Drive или шоурил для авто-откликов
+                        Добавьте ссылки на проекты, YouTube или Behance — нейросеть будет прикладывать подходящие кейсы к отклику.
                       </p>
                     </div>
                   </div>
@@ -1095,7 +1095,7 @@ export function App() {
                         7 Дней
                       </span>
                       <h3 className="font-heading font-bold text-base text-slate-900 mt-2">Неделя</h3>
-                      <p className="font-body text-xs text-slate-500 mt-1">Тест-драйв функций</p>
+                      <p className="font-body text-xs text-slate-500 mt-1">Для проверки работы бота</p>
                     </div>
                     <div className="mt-4 pt-3 border-t border-slate-200">
                       <div className="font-heading text-lg font-bold text-slate-900">300 ₽</div>
@@ -1116,7 +1116,7 @@ export function App() {
                     }`}
                   >
                     <div className="absolute -top-2.5 right-3 bg-gradient-to-r from-[#F86A38] to-[#D8226C] text-white font-bold text-[9px] px-2.5 py-0.5 rounded-full shadow-sm font-heading">
-                      ВЫГОДА
+                      ВЫГОДНО
                     </div>
                     {selectedPlan === 'month' && (
                       <div className="absolute top-2 right-2 w-4 h-4 rounded-full bg-[#F86A38] flex items-center justify-center">
@@ -1128,7 +1128,7 @@ export function App() {
                         30 Дней
                       </span>
                       <h3 className="font-heading font-bold text-base text-slate-900 mt-2">Месяц</h3>
-                      <p className="font-body text-xs text-slate-500 mt-1">Полный авто-отклик</p>
+                      <p className="font-body text-xs text-slate-500 mt-1">Постоянный поиск и отправка откликов</p>
                     </div>
                     <div className="mt-4 pt-3 border-t border-slate-200">
                       <div className="font-heading text-lg font-bold text-slate-900">600 ₽</div>
@@ -1185,7 +1185,7 @@ export function App() {
                     <div className="space-y-2 pt-1">
                       <div className="flex items-center justify-between">
                         <label className="block text-[11px] font-medium text-slate-700">
-                          Прикрепите чек (PDF или Скриншот) <span className="text-[#D8226C]">*</span>
+                          Прикрепите чек оплаты (PDF или фото) <span className="text-[#D8226C]">*</span>
                         </label>
                         <input
                           type="file"
@@ -1222,7 +1222,7 @@ export function App() {
                         </div>
                       ) : (
                         <p className="text-[10px] text-slate-500 font-body">
-                          Поддерживаются файлы PDF и фото (до 10 МБ)
+                          Максимальный размер файла — 10 МБ
                         </p>
                       )}
 
@@ -1250,7 +1250,7 @@ export function App() {
                       ) : (
                         <>
                           <Send size={15} />
-                          <span>Я перевёл</span>
+                          <span>Отправить чек</span>
                         </>
                       )}
                     </button>
