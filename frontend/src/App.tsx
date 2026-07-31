@@ -650,7 +650,7 @@ export function App() {
       <div className="flex items-center justify-between border-b border-[#B2DAE4]/50 pb-3 mb-4">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="font-heading text-xl font-bold gradient-header-text">
+            <h1 className="font-heading text-xl font-bold text-[#D8226C]">
               Vacancy Spotter
             </h1>
           </div>
@@ -665,7 +665,7 @@ export function App() {
               : 'figma-coral-badge'
           }`}
         >
-          {profile?.subscription_status === 'active' ? 'PRO: Активен' : 'Демо Тариф'}
+          {profile?.subscription_status === 'active' ? 'Подписка активна' : 'Демо Тариф'}
         </span>
       </div>
 
@@ -724,7 +724,7 @@ export function App() {
                           </div>
                         </div>
                         <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full ${subInfo.status === 'active' ? 'figma-emerald-badge' : 'figma-coral-badge'}`}>
-                          {subInfo.status === 'active' ? 'PRO' : 'Демо'}
+                          {subInfo.status === 'active' ? 'Активен' : 'Демо'}
                         </span>
                       </div>
 
@@ -735,7 +735,7 @@ export function App() {
                             triggerHaptic('medium');
                             setActiveTab('subscription');
                           }}
-                          className="flex-1 bg-gradient-to-r from-[#005BB3] to-[#D8226C] hover:from-[#004b94] hover:to-[#b81b5b] text-white text-xs py-2 rounded-lg font-bold shadow-sm flex items-center justify-center gap-1.5 transition-all hover:-translate-y-0.5 active:translate-y-0"
+                          className="flex-1 bg-[#D8226C] hover:bg-[#b81b5b] text-white text-xs py-2 rounded-lg font-bold shadow-sm flex items-center justify-center gap-1.5 transition-all hover:-translate-y-0.5 active:translate-y-0"
                         >
                           <Zap size={14} /> Управление & Продлить
                         </button>
@@ -862,7 +862,7 @@ export function App() {
                   <button
                     onClick={handleSaveProfile}
                     disabled={savingProfile}
-                    className="w-full font-body bg-gradient-to-r from-[#005BB3] to-[#D8226C] hover:from-[#004b94] hover:to-[#b81b5b] hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 text-white font-medium py-2.5 rounded-lg transition-all text-sm shadow-md shadow-[#005BB3]/20 flex items-center justify-center gap-2"
+                    className="w-full font-body bg-[#D8226C] hover:bg-[#b81b5b] hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 text-white font-medium py-2.5 rounded-lg transition-all text-sm shadow-md flex items-center justify-center gap-2"
                   >
                     {savingProfile ? (
                       <>
@@ -1240,7 +1240,7 @@ export function App() {
                       type="button"
                       onClick={handleRequestCard}
                       disabled={submittingCardRequest}
-                      className="w-full bg-gradient-to-r from-[#005BB3] to-[#D8226C] hover:from-[#004b94] hover:to-[#b81b5b] hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl transition-all shadow-md shadow-[#005BB3]/15 text-xs flex items-center justify-center gap-2 font-body"
+                      className="w-full bg-[#D8226C] hover:bg-[#b81b5b] hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl transition-all shadow-md text-xs flex items-center justify-center gap-2 font-body"
                     >
                       {submittingCardRequest ? (
                         <>
@@ -1250,7 +1250,7 @@ export function App() {
                       ) : (
                         <>
                           <Send size={15} />
-                          <span>Отправить чек</span>
+                          <span>Я перевёл</span>
                         </>
                       )}
                     </button>
