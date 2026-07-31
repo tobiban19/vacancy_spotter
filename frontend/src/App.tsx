@@ -17,7 +17,6 @@ import {
   Upload,
   ShieldCheck,
   Zap,
-  MessageCircleQuestion,
   ShieldCheck as AdminShieldIcon,
 } from 'lucide-react';
 import { api, UserProfile, PortfolioItem, Channel } from './api';
@@ -745,20 +744,10 @@ export function App() {
                             triggerHaptic('medium');
                             setActiveTab('subscription');
                           }}
-                          className="flex-1 bg-[#D8226C] hover:bg-[#b81b5b] text-white text-xs py-2 rounded-lg font-bold shadow-sm flex items-center justify-center gap-1.5 transition-all hover:-translate-y-0.5 active:translate-y-0"
+                          className="w-full bg-[#D8226C] hover:bg-[#b81b5b] text-white text-xs py-2 rounded-lg font-bold shadow-sm flex items-center justify-center gap-1.5 transition-all hover:-translate-y-0.5 active:translate-y-0"
                         >
                           <Zap size={14} /> Управление & Продлить
                         </button>
-
-                        <a
-                          href="https://t.me/p_timofeev"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={() => triggerHaptic('light')}
-                          className="bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 text-xs px-3 py-2 rounded-lg font-medium flex items-center gap-1 transition-all hover:-translate-y-0.5"
-                        >
-                          <MessageCircleQuestion size={14} /> Поддержка
-                        </a>
                       </div>
                     </div>
                   );

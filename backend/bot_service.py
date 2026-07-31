@@ -63,6 +63,12 @@ def get_welcome_keyboard(webapp_url: str = DEFAULT_WEBAPP_URL) -> InlineKeyboard
                     callback_data="menu_help",
                 ),
             ],
+            [
+                InlineKeyboardButton(
+                    text="💬 Поддержка",
+                    url="https://t.me/p_timofeev",
+                ),
+            ],
         ]
     )
 
