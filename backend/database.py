@@ -733,6 +733,17 @@ class DatabaseRepository:
             return None
         return await self.get_job_card_by_id(card_id, user_id)
 
+    async def update_job_card_draft(self, card_id: int, user_id: int, draft_reply: str) -> JobCardDTO | None:
+        assert self._conn is not None
+        cursor = await self._conn.execute(
+            "UPDATE user_job_cards SET draft_reply = ? WHERE id = ? AND user_id = ?",
+            (draft_reply, card_id, user_id)
+        )
+        await self._conn.commit()
+        if cursor.rowcount == 0:
+            return None
+        return await self.get_job_card_by_id(card_id, user_id)
+
     # ---------------------------------------------------------------------------
     # Admin & User Management Methods
     # ---------------------------------------------------------------------------

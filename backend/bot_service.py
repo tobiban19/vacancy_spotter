@@ -18,12 +18,15 @@ from aiogram.types import (
 
 from config import settings
 from database import DatabaseRepository
+from matching_service import generate_draft_reply
 from models import JobCardDTO, JobCardStatusEnum
 
 log = logging.getLogger("saas_bot")
 
 router = Router()
 repo = DatabaseRepository(settings.database_url)
+
+USER_REGEN_WAITING: dict[int, int] = {}
 
 _bot_instance: Bot | None = None
 
@@ -73,37 +76,50 @@ def get_welcome_keyboard(webapp_url: str = DEFAULT_WEBAPP_URL) -> InlineKeyboard
     )
 
 
-def get_job_card_keyboard(card_id: int) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="✅ Отправить отклик",
-                    callback_data=f"approve:{card_id}",
-                ),
-                InlineKeyboardButton(
-                    text="⏩ Пропустить",
-                    callback_data=f"skip:{card_id}",
-                ),
-            ]
-        ]
-    )
+def get_job_card_keyboard(card_id: int, post_url: str = "") -> InlineKeyboardMarkup:
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                text="✅ Отправить отклик",
+                callback_data=f"approve:{card_id}",
+            ),
+            InlineKeyboardButton(
+                text="✍️ Переписать отклик",
+                callback_data=f"rewrite:{card_id}",
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                text="🔄 Перегенерировать",
+                callback_data=f"regen:{card_id}",
+            ),
+        ],
+    ]
+    if post_url and (post_url.startswith("http://") or post_url.startswith("https://")):
+        keyboard.append([
+            InlineKeyboardButton(
+                text="🔗 Перейти к вакансии",
+                url=post_url,
+            )
+        ])
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 
 async def send_job_card_to_user(bot: Bot, card: JobCardDTO) -> Message | None:
     text = (
-        f"🎯 <b>Новая вакансия</b>\n\n"
-        f"📢 <b>Канал:</b> {card.channel_title or card.channel_username}\n"
+        f"🎯 <b>Новая вакансия #{card.id}</b>\n\n"
+        f"📢 <b>Канал:</b> {card.channel_title or card.channel_username}\n\n"
+        f"📝 <b>Текст объявления:</b>\n{card.post_text}\n"
     )
-    if card.post_url:
-        text += f"🔗 <b>Ссылка:</b> <a href=\"{card.post_url}\">{card.post_url}</a>\n"
-    text += f"\n📝 <b>Текст объявления:</b>\n{card.post_text}\n"
+
+    if card.draft_reply:
+        text += f"\n✍️ <b>Сгенерированный отклик:</b>\n<code>{card.draft_reply}</code>\n"
 
     if card.matched_keywords:
         kw_str = ", ".join(card.matched_keywords)
         text += f"\n💡 <b>Совпадения:</b> {kw_str}\n"
 
-    kb = get_job_card_keyboard(card.id)
+    kb = get_job_card_keyboard(card.id, card.post_url)
     try:
         msg = await bot.send_message(
             chat_id=card.user_id,
@@ -256,6 +272,85 @@ async def process_approve_job_card(query: CallbackQuery) -> None:
                 pass
     else:
         await query.answer("Карточка вакансии не найдена", show_alert=True)
+
+
+@router.callback_query(F.data.startswith("rewrite:"))
+async def process_rewrite_job_card(query: CallbackQuery) -> None:
+    if not query.from_user or not query.data:
+        return
+    card_id = int(query.data.split(":", 1)[1])
+    user_id = query.from_user.id
+
+    if repo._conn is None:
+        await repo.open()
+
+    card = await repo.get_job_card_by_id(card_id, user_id)
+    if not card:
+        await query.answer("Карточка не найдена", show_alert=True)
+        return
+
+    draft = card.draft_reply
+    if not draft or not draft.strip():
+        profile = await repo.get_user_profile(user_id)
+        draft = generate_draft_reply(profile, card.post_text)
+
+    await query.answer("Текст отправлен ниже. Нажмите на него для копирования.", show_alert=False)
+
+    if query.message and hasattr(query.message, "answer"):
+        await query.message.answer(
+            f"📋 <b>Ваш отклик (нажмите на текст, чтобы скопировать):</b>\n\n<code>{draft}</code>",
+            parse_mode=ParseMode.HTML,
+        )
+
+
+@router.callback_query(F.data.startswith("regen:"))
+async def process_regen_job_card(query: CallbackQuery) -> None:
+    if not query.from_user or not query.data:
+        return
+    card_id = int(query.data.split(":", 1)[1])
+    user_id = query.from_user.id
+
+    USER_REGEN_WAITING[user_id] = card_id
+
+    await query.answer()
+
+    if query.message and hasattr(query.message, "answer"):
+        await query.message.answer(
+            f"✏️ <b>Напишите ваши пожелания к отклику на вакансию #{card_id}:</b>\n\n"
+            f"<i>(Например: «Сделай тон более официальным» или «Укажи, что готов начать сегодня»)</i>",
+            parse_mode=ParseMode.HTML,
+        )
+
+
+@router.message(F.text & ~F.text.startswith("/"))
+async def handle_user_text_message(message: Message) -> None:
+    if not message.from_user:
+        return
+    user_id = message.from_user.id
+    if user_id in USER_REGEN_WAITING:
+        card_id = USER_REGEN_WAITING.pop(user_id)
+        user_instruction = message.text.strip()
+
+        if repo._conn is None:
+            await repo.open()
+
+        card = await repo.get_job_card_by_id(card_id, user_id)
+        profile = await repo.get_user_profile(user_id)
+
+        if card and profile:
+            new_draft = generate_draft_reply(profile, card.post_text, custom_instruction=user_instruction)
+            await repo.update_job_card_draft(card_id, user_id, new_draft)
+            card.draft_reply = new_draft
+
+            msg = (
+                f"✨ <b>Перегенерированный отклик (Вакансия #{card_id}):</b>\n\n"
+                f"💡 <i>Пожелание: {user_instruction}</i>\n\n"
+                f"<code>{new_draft}</code>"
+            )
+            kb = get_job_card_keyboard(card_id, card.post_url)
+            await message.answer(msg, parse_mode=ParseMode.HTML, reply_markup=kb)
+        else:
+            await message.answer("Не удалось найти вакансию для перегенерации.")
 
 
 @router.callback_query(F.data.startswith("skip:"))

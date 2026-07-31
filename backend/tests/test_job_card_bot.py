@@ -72,14 +72,15 @@ async def test_send_job_card_to_user():
     call_kwargs = mock_bot.send_message.call_args.kwargs
     assert call_kwargs["chat_id"] == 965000782
     assert "Видеомонтаж | Фриланс" in call_kwargs["text"]
-    assert "https://t.me/freelance_video/123" in call_kwargs["text"]
     assert "reels, shorts" in call_kwargs["text"]
     assert call_kwargs["reply_markup"] is not None
     # Inline keyboard buttons check
     inline_kb = call_kwargs["reply_markup"].inline_keyboard
-    assert len(inline_kb) == 1
+    assert len(inline_kb) == 3
     assert inline_kb[0][0].callback_data == "approve:101"
-    assert inline_kb[0][1].callback_data == "skip:101"
+    assert inline_kb[0][1].callback_data == "rewrite:101"
+    assert inline_kb[1][0].callback_data == "regen:101"
+    assert inline_kb[2][0].url == "https://t.me/freelance_video/123"
 
 
 @pytest.mark.asyncio
