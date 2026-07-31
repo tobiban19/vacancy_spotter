@@ -38,6 +38,16 @@ def run_local_preflight_checks():
         sys.exit(1)
     print("✅ All backend unit tests passed!")
     
+    # 3. Commit and Push to GitHub for Vercel auto-build
+    print("\n[Gate 3/3] Pushing latest build to GitHub & Vercel...")
+    subprocess.run(["git", "add", "."], cwd=LOCAL_DIR)
+    subprocess.run(["git", "commit", "-m", "deploy: sync latest build & vercel config"], cwd=LOCAL_DIR)
+    res_push = subprocess.run(["git", "push", "origin", "main"], cwd=LOCAL_DIR)
+    if res_push.returncode == 0:
+        print("✅ Git push successful! Vercel build triggered.")
+    else:
+        print("⚠️ Git push skipped or failed. Continuing VPS deployment.")
+
     print("==========================================")
     print("✅ PRE-DEPLOYMENT GATE PASSED SUCCESSFULLY!")
     print("==========================================\n")
