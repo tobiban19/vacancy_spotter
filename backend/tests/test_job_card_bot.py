@@ -112,7 +112,7 @@ async def test_callback_query_approve_and_skip(test_env):
 
     updated_card_1 = await test_repo.get_job_card_by_id(card.id, user_id)
     assert updated_card_1.status == JobCardStatusEnum.APPLIED
-    mock_query_approve.answer.assert_called_once_with("✅ Отклик отправлен! Заявка одобрена.", show_alert=True)
+    mock_query_approve.answer.assert_called_once_with("Отклик одобрен и отправлен.", show_alert=True)
     mock_query_approve.message.edit_reply_markup.assert_called_once_with(reply_markup=None)
 
     # 2. Test skip callback
@@ -136,7 +136,7 @@ async def test_callback_query_approve_and_skip(test_env):
 
     updated_card_2 = await test_repo.get_job_card_by_id(card2.id, user_id)
     assert updated_card_2.status == JobCardStatusEnum.REJECTED
-    mock_query_skip.answer.assert_called_once_with("⏩ Вакансия пропущена", show_alert=False)
+    mock_query_skip.answer.assert_called_once_with("Пропустили вакансию", show_alert=False)
 
 
 @pytest.mark.asyncio

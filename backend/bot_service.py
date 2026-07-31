@@ -42,12 +42,12 @@ DEFAULT_WEBAPP_URL = "https://frontend-psi-nine-2ydjpsdrfq.vercel.app"
 def get_welcome_keyboard(webapp_url: str = DEFAULT_WEBAPP_URL) -> InlineKeyboardMarkup:
     if webapp_url.startswith("https://"):
         btn = InlineKeyboardButton(
-            text="📱 Открыть веб-кабинет фрилансера",
+            text="📱 Открыть личный кабинет",
             web_app=WebAppInfo(url=webapp_url),
         )
     else:
         btn = InlineKeyboardButton(
-            text="📱 Открыть веб-кабинет фрилансера",
+            text="📱 Открыть личный кабинет",
             url=webapp_url,
         )
     return InlineKeyboardMarkup(
@@ -55,11 +55,11 @@ def get_welcome_keyboard(webapp_url: str = DEFAULT_WEBAPP_URL) -> InlineKeyboard
             [btn],
             [
                 InlineKeyboardButton(
-                    text="💳 Управление подпиской",
+                    text="💳 Подписка и тарифы",
                     callback_data="menu_subscription",
                 ),
                 InlineKeyboardButton(
-                    text="❓ Инструкция",
+                    text="❓ Как это работает",
                     callback_data="menu_help",
                 ),
             ],
@@ -72,7 +72,7 @@ def get_job_card_keyboard(card_id: int) -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="✅ Одобрить & Откликнуться",
+                    text="✅ Отправить отклик",
                     callback_data=f"approve:{card_id}",
                 ),
                 InlineKeyboardButton(
@@ -86,7 +86,7 @@ def get_job_card_keyboard(card_id: int) -> InlineKeyboardMarkup:
 
 async def send_job_card_to_user(bot: Bot, card: JobCardDTO) -> Message | None:
     text = (
-        f"🎯 <b>Новый заказ / вакансия!</b>\n\n"
+        f"🎯 <b>Новая вакансия</b>\n\n"
         f"📢 <b>Канал:</b> {card.channel_title or card.channel_username}\n"
     )
     if card.post_url:
@@ -126,18 +126,18 @@ async def cmd_start(message: Message) -> None:
     profile, is_new = await repo.get_or_create_user(tg_user)
     sub = await repo.get_subscription_status(profile.user_id)
 
-    status_text = "⚡ <b>Демо-доступ на 2 дня активен!</b>" if is_new else f"Статус: <b>{sub.status.upper()}</b> (осталось дней: {sub.days_left})"
+    status_text = "Включили бесплатный PRO-доступ на 2 дня." if is_new else f"Статус: <b>{sub.status.upper()}</b> (осталось дней: {sub.days_left})"
 
     welcome_msg = (
-        f"👋 <b>Привет, {message.from_user.first_name}!</b>\n\n"
-        f"Добро пожаловать в <b>Vacancy Spotter SaaS</b> — глобальную платформу авто-поиска фриланс-заказов.\n\n"
+        f"<b>Здравствуйте, {message.from_user.first_name}!</b>\n\n"
+        f"Vacancy Spotter ищет заказы для фрилансеров в Telegram-каналах и готовит точные отклики.\n\n"
         f"📌 {status_text}\n\n"
-        f"<b>С чего начать:</b>\n"
-        f"1. Нажмите кнопку <b>«📱 Открыть веб-кабинет»</b> ниже.\n"
-        f"2. Выберите вашу профессию (Монтаж, Моушн, Копирайтинг и др.).\n"
-        f"3. Загрузите примеры работ и укажите стек софта.\n"
-        f"4. Включите каналы поиска заказов.\n\n"
-        f"После этого бот пришлёт вам первые персональные отклики!"
+        f"<b>Как начать работу:</b>\n"
+        f"1. Нажмите <b>«📱 Открыть личный кабинет»</b> ниже.\n"
+        f"2. Выберите профессию и укажите стоп-слова.\n"
+        f"3. Загрузите резюме в PDF или опишите навыки.\n"
+        f"4. Добавьте ссылки на проекты в портфолио.\n\n"
+        f"После настройки бот начнёт присылать вам готовые карточки откликов."
     )
     try:
         await message.answer(welcome_msg, parse_mode=ParseMode.HTML, reply_markup=get_welcome_keyboard())
@@ -157,25 +157,25 @@ async def process_menu_subscription(query: CallbackQuery) -> None:
     user_id = query.from_user.id
     sub = await repo.get_subscription_status(user_id)
 
-    status_str = "✅ Активна" if sub.is_valid and sub.status == "active" else ("⚡ Демо-доступ (2 дня)" if sub.is_valid else "❌ Истёк")
+    status_str = "Активна" if sub.is_valid and sub.status == "active" else ("Демо-доступ (2 дня)" if sub.is_valid else "Истёк")
     until_str = sub.subscription_until.strftime("%d.%m.%Y %H:%M") if sub.subscription_until else (sub.demo_until.strftime("%d.%m.%Y %H:%M") if sub.demo_until else "Не активирована")
 
     text = (
-        f"💳 <b>Управление подпиской Vacancy Spotter:</b>\n\n"
-        f"• Статус доступа: <b>{status_str}</b>\n"
+        f"💳 <b>Статус подписки:</b>\n\n"
+        f"• Доступ: <b>{status_str}</b>\n"
         f"• Осталось дней: <b>{sub.days_left}</b>\n"
         f"• Действует до: <b>{until_str} UTC</b>\n\n"
-        f"<b>Тарифы на продление:</b>\n"
-        f"• <b>Неделя</b> (7 дней): 300 ₽\n"
-        f"• <b>Месяц</b> (30 дней): 600 ₽ (Выгода!)\n\n"
-        f"<i>Для оплаты переводом на карту нажмите кнопку ниже:</i>"
+        f"<b>Тарифы:</b>\n"
+        f"• <b>7 дней</b>: 300 ₽\n"
+        f"• <b>30 дней</b>: 600 ₽ (выгодно)\n\n"
+        f"<i>Чтобы продлить доступ, откройте личный кабинет:</i>"
     )
 
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="⚡ Открыть подписку в веб-кабинете",
+                    text="📱 Открыть личный кабинет",
                     web_app=WebAppInfo(url=DEFAULT_WEBAPP_URL),
                 )
             ]
@@ -189,21 +189,17 @@ async def process_menu_subscription(query: CallbackQuery) -> None:
 async def process_menu_help(query: CallbackQuery) -> None:
     await query.answer()
     help_text = (
-        "📖 <b>Инструкция по работе с Vacancy Spotter SaaS:</b>\n\n"
-        "1️⃣ <b>Настройка профиля:</b>\n"
-        "Откройте веб-кабинет, выберите вашу профессию (например, <i>Веб-дизайнер</i> или <i>Видеомонтажёр</i>) и укажите стоп-слова для исключения мусорных вакансий.\n\n"
-        "2️⃣ <b>Загрузка резюме (PDF):</b>\n"
-        "В веб-кабинете нажмите кнопку «📄 Извлечь из PDF» — бот автоматически считает ваш опыт и навыки для составления ИИ-откликов.\n\n"
-        "3️⃣ <b>Портфолио & Кейсы:</b>\n"
-        "Добавьте ссылки на ролики, шоурил, Behance или Диск. ИИ прикрепит подходящий пример работы к вашему отклику.\n\n"
-        "4️⃣ <b>Получение заказов:</b>\n"
-        "Как только появится подходящая вакансия, бот пришлёт её в личку с готовой кнопкой «✅ Одобрить & Откликнуться»!"
+        "<b>Как работает Vacancy Spotter:</b>\n\n"
+        "1. <b>Настройка профиля:</b> откройте личный кабинет, выберите профессию и укажите стоп-слова.\n\n"
+        "2. <b>Загрузка резюме:</b> нажмите «Извлечь из PDF» — бот сам прочитает ваш опыт.\n\n"
+        "3. <b>Проекты в портфолио:</b> прикрепите ссылки на проекты, чтобы нейросеть прикладывала их к отклику.\n\n"
+        "4. <b>Отправка откликов:</b> когда появится подходящая вакансия, нажмите «Отправить отклик»."
     )
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="📱 Открыть веб-кабинет фрилансера",
+                    text="📱 Открыть личный кабинет",
                     web_app=WebAppInfo(url=DEFAULT_WEBAPP_URL),
                 )
             ]
@@ -222,11 +218,11 @@ async def cmd_stats(message: Message) -> None:
         await repo.open()
     sub = await repo.get_subscription_status(message.from_user.id)
     msg = (
-        f"📊 <b>Ваш статус в Vacancy Spotter:</b>\n\n"
-        f"• Статус доступа: <b>{sub.status.upper()}</b>\n"
+        f"📊 <b>Ваш статус доступа:</b>\n\n"
+        f"• Подписка: <b>{sub.status.upper()}</b>\n"
         f"• Осталось дней: <b>{sub.days_left}</b>\n"
-        f"• Активность доступа: {'✅ Да' if sub.is_valid else '❌ Истёк'}\n\n"
-        f"<i>Для продления доступа используйте веб-кабинет.</i>"
+        f"• Доступ активен: {'Да' if sub.is_valid else 'Истёк'}\n\n"
+        f"<i>Продлить подписку можно в личном кабинете.</i>"
     )
     await message.answer(msg, parse_mode=ParseMode.HTML)
 
@@ -246,7 +242,7 @@ async def process_approve_job_card(query: CallbackQuery) -> None:
 
     updated = await repo.update_job_card_status(card_id, user_id, JobCardStatusEnum.APPLIED)
     if updated:
-        await query.answer("✅ Отклик отправлен! Заявка одобрена.", show_alert=True)
+        await query.answer("Отклик одобрен и отправлен.", show_alert=True)
         if query.message and hasattr(query.message, "edit_reply_markup"):
             try:
                 await query.message.edit_reply_markup(reply_markup=None)
@@ -271,7 +267,7 @@ async def process_skip_job_card(query: CallbackQuery) -> None:
 
     updated = await repo.update_job_card_status(card_id, user_id, JobCardStatusEnum.REJECTED)
     if updated:
-        await query.answer("⏩ Вакансия пропущена", show_alert=False)
+        await query.answer("Пропустили вакансию", show_alert=False)
         if query.message and hasattr(query.message, "edit_reply_markup"):
             try:
                 await query.message.edit_reply_markup(reply_markup=None)

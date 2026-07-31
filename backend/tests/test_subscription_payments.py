@@ -202,7 +202,7 @@ async def test_menu_subscription_and_help_callbacks(async_client: AsyncClient):
     await bot_service.process_menu_subscription(mock_query_sub)
     mock_query_sub.answer.assert_called_once()
     mock_query_sub.message.answer.assert_called_once()
-    assert "Управление подпиской" in mock_query_sub.message.answer.call_args.args[0]
+    assert "Статус подписки" in mock_query_sub.message.answer.call_args.args[0]
 
     # Test menu_help
     mock_query_help = AsyncMock()
@@ -213,5 +213,5 @@ async def test_menu_subscription_and_help_callbacks(async_client: AsyncClient):
     await bot_service.process_menu_help(mock_query_help)
     mock_query_help.answer.assert_called_once()
     mock_query_help.message.answer.assert_called_once()
-    assert "Инструкция по работе" in mock_query_help.message.answer.call_args.args[0]
+    assert "Как работает Vacancy Spotter" in mock_query_help.message.answer.call_args.args[0]
 
