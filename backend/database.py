@@ -182,6 +182,10 @@ class DatabaseRepository:
             );
         """)
 
+        # Clean up t.me/ prefixes in existing channels
+        await self._conn.execute("UPDATE channels SET username = REPLACE(REPLACE(username, 't.me/', ''), 'https://t.me/', '') WHERE username LIKE '%t.me%';")
+        await self._conn.execute("UPDATE channels SET title = '@' || username WHERE title LIKE '%t.me%';")
+
         await self._conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_channels_prof_user ON channels(profession_id, username);")
         
         # Additive migration for is_banned & ban_reason
