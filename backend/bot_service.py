@@ -2,6 +2,7 @@
 Telegram Bot Service for Vacancy Spotter SaaS (@vacancy_spott_bot).
 """
 
+import html
 import logging
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.enums import ParseMode
@@ -106,24 +107,29 @@ def get_job_card_keyboard(card_id: int, post_url: str = "") -> InlineKeyboardMar
 
 
 async def send_job_card_to_user(bot: Bot, card: JobCardDTO) -> Message | None:
+    escaped_post_text = html.escape(card.post_text)
+    channel_name = html.escape(card.channel_title or card.channel_username)
+
     text = (
-        f"🎯 <b>Новая вакансия #{card.id}</b>\n\n"
-        f"📢 <b>Канал:</b> {card.channel_title or card.channel_username}\n\n"
-        f"📝 <b>Текст объявления:</b>\n{card.post_text}\n"
+        f"🎯 <b>ВАКАНСИЯ #{card.id}</b>\n"
+        f"📢 <b>Канал:</b> {channel_name}\n\n"
+        f"📌 <b>Объявление:</b>\n"
+        f"<blockquote expandable>{escaped_post_text}</blockquote>\n\n"
     )
 
     if card.draft_reply:
-        text += f"\n✍️ <b>Сгенерированный отклик:</b>\n<code>{card.draft_reply}</code>\n"
+        escaped_draft = html.escape(card.draft_reply)
+        text += f"✍️ <b>Готовый отклик (нажмите, чтобы скопировать):</b>\n<code>{escaped_draft}</code>\n\n"
 
     if card.matched_keywords:
-        kw_str = ", ".join(card.matched_keywords)
-        text += f"\n💡 <b>Совпадения:</b> {kw_str}\n"
+        kw_str = html.escape(", ".join(card.matched_keywords))
+        text += f"💡 <b>Ключевые совпадения:</b> {kw_str}\n"
 
     kb = get_job_card_keyboard(card.id, card.post_url)
     try:
         msg = await bot.send_message(
             chat_id=card.user_id,
-            text=text,
+            text=text.strip(),
             parse_mode=ParseMode.HTML,
             reply_markup=kb,
             disable_web_page_preview=True,
