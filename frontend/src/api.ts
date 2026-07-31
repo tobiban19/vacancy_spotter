@@ -107,7 +107,10 @@ export interface AdminUserDetail {
   created_at: string;
 }
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+const DEFAULT_API_URL = typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')
+  ? 'http://72.56.79.35:8000'
+  : '';
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || DEFAULT_API_URL;
 
 function getHeaders(): Record<string, string> {
   const tg = (window as any).Telegram?.WebApp;
@@ -131,6 +134,11 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(`API Error (${response.status}): ${errorText}`);
+  }
+
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    throw new Error(`Сервер вернул HTML вместо JSON. Убедитесь, что бэкенд доступен по адресу ${url}`);
   }
 
   return response.json();

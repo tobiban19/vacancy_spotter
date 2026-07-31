@@ -3,6 +3,7 @@
   "outputDirectory": "frontend/dist",
   "framework": "vite",
   "rewrites": [
+    { "source": "/api/(.*)", "destination": "http://72.56.79.35:8000/api/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
