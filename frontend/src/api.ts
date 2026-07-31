@@ -107,10 +107,7 @@ export interface AdminUserDetail {
   created_at: string;
 }
 
-const DEFAULT_API_URL = typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')
-  ? 'http://72.56.79.35:8000'
-  : '';
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || DEFAULT_API_URL;
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
 function getHeaders(): Record<string, string> {
   const tg = (window as any).Telegram?.WebApp;
