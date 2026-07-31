@@ -63,11 +63,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-frontend_dir = Path(__file__).parent.parent / "frontend" / "public"
-if frontend_dir.exists():
+dist_dir = Path(__file__).parent.parent / "frontend" / "dist"
+if dist_dir.exists():
     @app.get("/app", include_in_schema=False)
     async def serve_mini_app():
-        return FileResponse(frontend_dir / "index.html")
+        return FileResponse(dist_dir / "index.html")
 
 
 
