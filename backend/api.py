@@ -2,6 +2,7 @@
 FastAPI REST API Server for Vacancy Spotter SaaS Telegram Mini App.
 """
 
+import os
 import base64
 from contextlib import asynccontextmanager
 from typing import Annotated, Literal
@@ -489,4 +490,19 @@ async def process_incoming_job(req: IncomingJobDTO):
 
 
 app.include_router(jobs_router)
+
+@app.middleware("http")
+async def add_anti_cache_headers(request, call_next):
+    response = await call_next(request)
+    if request.url.path in ["/app", "/app/", "/app/index.html"]:
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
+from fastapi.staticfiles import StaticFiles
+
+dist_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend", "dist"))
+if os.path.exists(dist_dir):
+    app.mount("/app", StaticFiles(directory=dist_dir, html=True), name="frontend_app")
 
