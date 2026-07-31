@@ -18,8 +18,10 @@ import {
   ShieldCheck,
   Zap,
   MessageCircleQuestion,
+  ShieldCheck as AdminShieldIcon,
 } from 'lucide-react';
 import { api, UserProfile, PortfolioItem, Channel } from './api';
+import { AdminPanel } from './AdminPanel';
 
 interface TelegramUser {
   id?: number;
@@ -47,8 +49,9 @@ const triggerHaptic = (style: 'light' | 'medium' | 'heavy' | 'rigid' | 'soft' = 
 };
 
 export function App() {
-  const [activeTab, setActiveTab] = useState<'profile' | 'portfolio' | 'channels' | 'subscription'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'portfolio' | 'channels' | 'subscription' | 'admin'>('profile');
   const [tgUser, setTgUser] = useState<TelegramUser | null>(null);
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
 
   // API State
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -102,7 +105,7 @@ export function App() {
     }, 4000);
   };
 
-  const handleTabChange = (tab: 'profile' | 'portfolio' | 'channels' | 'subscription') => {
+  const handleTabChange = (tab: 'profile' | 'portfolio' | 'channels' | 'subscription' | 'admin') => {
     triggerHaptic('light');
     setActiveTab(tab);
   };
@@ -236,10 +239,11 @@ export function App() {
     setLoading(true);
     setError(null);
     try {
-      const [profileData, portfolioData, channelsData] = await Promise.all([
+      const [profileData, portfolioData, channelsData, adminRes] = await Promise.all([
         api.getProfile().catch(() => null),
         api.getPortfolio().catch(() => []),
         api.getChannels().catch(() => []),
+        api.checkAdmin().catch(() => ({ is_admin: false, user_id: 0 })),
       ]);
 
       if (profileData) {
@@ -251,6 +255,7 @@ export function App() {
 
       setPortfolio(portfolioData || []);
       setChannels(channelsData || []);
+      setIsAdmin(Boolean(adminRes?.is_admin));
     } catch (err: any) {
       console.error('Failed to load initial data:', err);
       setError('Не удалось загрузить данные с сервера');
@@ -1258,6 +1263,8 @@ export function App() {
                 </div>
               </div>
             )}
+            {/* ADMIN TAB */}
+            {activeTab === 'admin' && <AdminPanel />}
           </>
         )}
       </div>
@@ -1301,6 +1308,18 @@ export function App() {
             <CreditCard size={20} />
             <span>Тарифы</span>
           </button>
+
+          {isAdmin && (
+            <button
+              onClick={() => handleTabChange('admin')}
+              className={`flex flex-col items-center gap-1 text-xs font-body transition-colors ${
+                activeTab === 'admin' ? 'text-[#005BB3] font-semibold' : 'text-slate-500 hover:text-[#005BB3]'
+              }`}
+            >
+              <AdminShieldIcon size={20} className={activeTab === 'admin' ? 'text-[#005BB3]' : 'text-slate-500'} />
+              <span>Админка</span>
+            </button>
+          )}
         </div>
       </div>
     </div>

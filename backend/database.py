@@ -12,6 +12,11 @@ import aiosqlite
 
 from config import settings
 from models import (
+    AdminBanUpdateDTO,
+    AdminStatsDTO,
+    AdminSubscriptionUpdateDTO,
+    AdminUserDetailDTO,
+    AdminUserDTO,
     ChannelDTO,
     JobCardCreateDTO,
     JobCardDTO,
@@ -153,6 +158,15 @@ class DatabaseRepository:
         );
         CREATE INDEX IF NOT EXISTS idx_user_job_cards_user_id ON user_job_cards(user_id);
         """)
+        
+        # Additive migration for is_banned & ban_reason
+        columns = await self._conn.execute("PRAGMA table_info(users);")
+        existing_cols = {row["name"] for row in await columns.fetchall()}
+        if "is_banned" not in existing_cols:
+            await self._conn.execute("ALTER TABLE users ADD COLUMN is_banned INTEGER DEFAULT 0;")
+        if "ban_reason" not in existing_cols:
+            await self._conn.execute("ALTER TABLE users ADD COLUMN ban_reason TEXT DEFAULT NULL;")
+
         await self._conn.commit()
 
     async def _seed_professions_and_channels(self) -> None:
@@ -268,6 +282,15 @@ class DatabaseRepository:
             bio_summary=bio_summary,
             software_stack=software_stack,
         )
+
+    async def get_user_profile(self, user_id: int) -> UserProfileDTO | None:
+        assert self._conn is not None
+        async with self._conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)) as cursor:
+            u_row = await cursor.fetchone()
+        if not u_row:
+            return None
+        r_row = await self._get_resume(user_id)
+        return self._row_to_profile(u_row, r_row)
 
     # ---------------------------------------------------------------------------
     # User Profile & Portfolio CRUD
@@ -668,4 +691,212 @@ class DatabaseRepository:
         if cursor.rowcount == 0:
             return None
         return await self.get_job_card_by_id(card_id, user_id)
+
+    # ---------------------------------------------------------------------------
+    # Admin & User Management Methods
+    # ---------------------------------------------------------------------------
+
+    async def is_user_banned(self, user_id: int) -> bool:
+        assert self._conn is not None
+        async with self._conn.execute("SELECT is_banned FROM users WHERE id = ?", (user_id,)) as cursor:
+            row = await cursor.fetchone()
+        if not row:
+            return False
+        return bool(row["is_banned"])
+
+    async def get_admin_stats(self) -> AdminStatsDTO:
+        assert self._conn is not None
+        async with self._conn.execute("""
+            SELECT 
+                COUNT(*) as total_users,
+                SUM(CASE WHEN subscription_status = 'active' AND (is_banned IS NULL OR is_banned = 0) THEN 1 ELSE 0 END) as active_paid,
+                SUM(CASE WHEN subscription_status = 'demo' AND (is_banned IS NULL OR is_banned = 0) THEN 1 ELSE 0 END) as demo_users,
+                SUM(CASE WHEN subscription_status = 'expired' AND (is_banned IS NULL OR is_banned = 0) THEN 1 ELSE 0 END) as expired_users,
+                SUM(CASE WHEN is_banned = 1 THEN 1 ELSE 0 END) as banned_users
+            FROM users
+        """) as cursor:
+            row = await cursor.fetchone()
+
+        if not row:
+            return AdminStatsDTO(
+                total_users=0,
+                active_paid_users=0,
+                demo_users=0,
+                expired_users=0,
+                banned_users=0,
+            )
+
+        return AdminStatsDTO(
+            total_users=row["total_users"] or 0,
+            active_paid_users=row["active_paid"] or 0,
+            demo_users=row["demo_users"] or 0,
+            expired_users=row["expired_users"] or 0,
+            banned_users=row["banned_users"] or 0,
+        )
+
+    async def get_admin_users_list(
+        self, page: int = 1, limit: int = 20, search: str = "", status_filter: str = "all"
+    ) -> tuple[list[AdminUserDTO], int]:
+        assert self._conn is not None
+        offset = (page - 1) * limit
+        where_clauses: list[str] = []
+        params: list[Any] = []
+
+        if search.strip():
+            s = f"%{search.strip()}%"
+            where_clauses.append("(u.username LIKE ? OR u.first_name LIKE ? OR CAST(u.id AS TEXT) LIKE ?)")
+            params.extend([s, s, s])
+
+        if status_filter == "banned":
+            where_clauses.append("u.is_banned = 1")
+        elif status_filter in ("demo", "active", "expired"):
+            where_clauses.append("(u.is_banned IS NULL OR u.is_banned = 0)")
+            where_clauses.append("u.subscription_status = ?")
+            params.append(status_filter)
+
+        where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+
+        # Count query
+        count_sql = f"SELECT COUNT(*) as total FROM users u {where_sql}"
+        async with self._conn.execute(count_sql, params) as cursor:
+            total_row = await cursor.fetchone()
+            total_count = total_row["total"] if total_row else 0
+
+        # Query items with channel count
+        query_sql = f"""
+            SELECT 
+                u.*,
+                (SELECT COUNT(*) FROM user_channels uc WHERE uc.user_id = u.id AND uc.is_enabled = 1) as channels_count
+            FROM users u
+            {where_sql}
+            ORDER BY u.created_at DESC
+            LIMIT ? OFFSET ?
+        """
+        queryParams = list(params) + [limit, offset]
+
+        users: list[AdminUserDTO] = []
+        async with self._conn.execute(query_sql, queryParams) as cursor:
+            async for row in cursor:
+                demo_until_dt = datetime.fromisoformat(row["demo_until"]) if row["demo_until"] else datetime.now(timezone.utc)
+                sub_until_dt = datetime.fromisoformat(row["subscription_until"]) if row["subscription_until"] else None
+                created_at_dt = datetime.fromisoformat(row["created_at"]) if row["created_at"] else datetime.now(timezone.utc)
+
+                users.append(
+                    AdminUserDTO(
+                        user_id=row["id"],
+                        username=row["username"],
+                        first_name=row["first_name"],
+                        profession_id=row["profession_id"],
+                        subscription_status=row["subscription_status"] or "demo",
+                        demo_until=demo_until_dt,
+                        subscription_until=sub_until_dt,
+                        is_banned=bool(row["is_banned"]),
+                        ban_reason=row["ban_reason"],
+                        channels_count=row["channels_count"] or 0,
+                        created_at=created_at_dt,
+                    )
+                )
+
+        return users, total_count
+
+    async def get_admin_user_details(self, user_id: int) -> AdminUserDetailDTO | None:
+        assert self._conn is not None
+        # User profile
+        profile = await self.get_user_profile(user_id)
+        if not profile:
+            return None
+
+        # Fetch extra user columns
+        async with self._conn.execute("SELECT is_banned, ban_reason, created_at FROM users WHERE id = ?", (user_id,)) as cursor:
+            u_row = await cursor.fetchone()
+
+        is_banned = bool(u_row["is_banned"]) if u_row else False
+        ban_reason = u_row["ban_reason"] if u_row else None
+        created_at_dt = datetime.fromisoformat(u_row["created_at"]) if u_row and u_row["created_at"] else datetime.now(timezone.utc)
+
+        # Resume / Bio summary
+        bio_summary = ""
+        software_stack: list[str] = []
+        async with self._conn.execute("SELECT bio_summary, software_stack FROM resumes WHERE user_id = ?", (user_id,)) as cursor:
+            r_row = await cursor.fetchone()
+            if r_row:
+                bio_summary = r_row["bio_summary"] or ""
+                try:
+                    software_stack = json.loads(r_row["software_stack"] or "[]")
+                except Exception:
+                    software_stack = []
+
+        # Connected channels
+        connected_channels: list[dict[str, Any]] = []
+        async with self._conn.execute("""
+            SELECT c.id, c.username, c.title, c.profession_id, uc.is_enabled
+            FROM user_channels uc
+            JOIN channels c ON uc.channel_id = c.id
+            WHERE uc.user_id = ?
+        """, (user_id,)) as cursor:
+            async for ch in cursor:
+                connected_channels.append({
+                    "channel_id": ch["id"],
+                    "username": ch["username"],
+                    "title": ch["title"],
+                    "profession_id": ch["profession_id"],
+                    "is_enabled": bool(ch["is_enabled"]),
+                })
+
+        return AdminUserDetailDTO(
+            profile=profile,
+            is_banned=is_banned,
+            ban_reason=ban_reason,
+            bio_summary=bio_summary,
+            software_stack=software_stack,
+            stop_words=profile.stop_words,
+            connected_channels=connected_channels,
+            created_at=created_at_dt,
+        )
+
+    async def update_user_subscription(
+        self, user_id: int, update_dto: AdminSubscriptionUpdateDTO
+    ) -> UserProfileDTO | None:
+        assert self._conn is not None
+        now = datetime.now(timezone.utc)
+
+        # Fetch current sub
+        profile = await self.get_user_profile(user_id)
+        if not profile:
+            return None
+
+        new_status = profile.subscription_status
+        new_until = profile.subscription_until
+
+        if update_dto.action == "add_days":
+            days_to_add = update_dto.days or 30
+            # If current subscription is in the future, extend from that date, otherwise from now
+            base_date = new_until if (new_until and new_until > now) else now
+            new_until = base_date + timedelta(days=days_to_add)
+            new_status = "active"
+        elif update_dto.action == "set_status":
+            if update_dto.status:
+                new_status = update_dto.status
+        elif update_dto.action == "revoke":
+            new_status = "expired"
+            new_until = now
+
+        new_until_str = new_until.isoformat() if new_until else None
+
+        await self._conn.execute(
+            "UPDATE users SET subscription_status = ?, subscription_until = ? WHERE id = ?",
+            (new_status, new_until_str, user_id)
+        )
+        await self._conn.commit()
+        return await self.get_user_profile(user_id)
+
+    async def set_user_ban_status(self, user_id: int, update_dto: AdminBanUpdateDTO) -> bool:
+        assert self._conn is not None
+        cursor = await self._conn.execute(
+            "UPDATE users SET is_banned = ?, ban_reason = ? WHERE id = ?",
+            (1 if update_dto.is_banned else 0, update_dto.ban_reason, user_id)
+        )
+        await self._conn.commit()
+        return cursor.rowcount > 0
+
 

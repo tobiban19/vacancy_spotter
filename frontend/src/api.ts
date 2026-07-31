@@ -68,6 +68,45 @@ export interface Profession {
   icon_emoji: string;
 }
 
+export interface AdminUser {
+  user_id: number;
+  username?: string | null;
+  first_name: string;
+  profession_id: string;
+  subscription_status: string;
+  demo_until: string;
+  subscription_until?: string | null;
+  is_banned: boolean;
+  ban_reason?: string | null;
+  channels_count: number;
+  created_at: string;
+}
+
+export interface AdminStats {
+  total_users: number;
+  active_paid_users: number;
+  demo_users: number;
+  expired_users: number;
+  banned_users: number;
+}
+
+export interface AdminUserDetail {
+  profile: UserProfile;
+  is_banned: boolean;
+  ban_reason?: string | null;
+  bio_summary: string;
+  software_stack: string[];
+  stop_words: string[];
+  connected_channels: Array<{
+    channel_id: number;
+    username: string;
+    title: string;
+    profession_id: string;
+    is_enabled: boolean;
+  }>;
+  created_at: string;
+}
+
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
 function getHeaders(): Record<string, string> {
@@ -170,4 +209,23 @@ export const api = {
     }
     return response.json();
   },
+
+  // Admin API
+  checkAdmin: (): Promise<{ is_admin: boolean; user_id: number }> =>
+    request<{ is_admin: boolean; user_id: number }>('/api/admin/check'),
+  getAdminStats: (): Promise<AdminStats> => request<AdminStats>('/api/admin/stats'),
+  getAdminUsers: (page = 1, limit = 20, search = '', status = 'all'): Promise<{ items: AdminUser[]; total: number; page: number; limit: number; pages: number }> =>
+    request(`/api/admin/users?page=${page}&limit=${limit}&search=${encodeURIComponent(search)}&status=${status}`),
+  getAdminUserDetail: (userId: number): Promise<AdminUserDetail> =>
+    request<AdminUserDetail>(`/api/admin/users/${userId}`),
+  updateAdminUserSubscription: (userId: number, dto: { action: 'add_days' | 'set_status' | 'revoke'; days?: number; status?: string }): Promise<UserProfile> =>
+    request<UserProfile>(`/api/admin/users/${userId}/subscription`, {
+      method: 'POST',
+      body: JSON.stringify(dto),
+    }),
+  updateAdminUserBan: (userId: number, dto: { is_banned: boolean; ban_reason?: string }): Promise<{ status: string; is_banned: boolean; ban_reason?: string }> =>
+    request(`/api/admin/users/${userId}/ban`, {
+      method: 'POST',
+      body: JSON.stringify(dto),
+    }),
 };

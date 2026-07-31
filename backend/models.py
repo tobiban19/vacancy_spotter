@@ -114,3 +114,52 @@ class SubscriptionStatusDTO(BaseModel):
     subscription_until: datetime | None = None
     days_left: int
     is_valid: bool
+
+
+# ---------------------------------------------------------------------------
+# Admin DTOs
+# ---------------------------------------------------------------------------
+
+class AdminUserDTO(BaseModel):
+    user_id: int
+    username: str | None = None
+    first_name: str
+    profession_id: str
+    subscription_status: str
+    demo_until: datetime
+    subscription_until: datetime | None = None
+    is_banned: bool = False
+    ban_reason: str | None = None
+    channels_count: int = 0
+    created_at: datetime
+
+
+class AdminStatsDTO(BaseModel):
+    total_users: int
+    active_paid_users: int
+    demo_users: int
+    expired_users: int
+    banned_users: int
+
+
+class AdminUserDetailDTO(BaseModel):
+    profile: UserProfileDTO
+    is_banned: bool
+    ban_reason: str | None
+    bio_summary: str
+    software_stack: list[str]
+    stop_words: list[str]
+    connected_channels: list[dict[str, Any]]
+    created_at: datetime
+
+
+class AdminSubscriptionUpdateDTO(BaseModel):
+    action: Literal["add_days", "set_status", "revoke"]
+    days: int | None = None
+    status: Literal["demo", "active", "expired"] | None = None
+
+
+class AdminBanUpdateDTO(BaseModel):
+    is_banned: bool
+    ban_reason: str | None = None
+

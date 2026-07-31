@@ -24,6 +24,11 @@ from auth import verify_telegram_init_data
 from config import settings
 from database import DatabaseRepository
 from models import (
+    AdminBanUpdateDTO,
+    AdminStatsDTO,
+    AdminSubscriptionUpdateDTO,
+    AdminUserDetailDTO,
+    AdminUserDTO,
     ChannelCustomAddDTO,
     ChannelDTO,
     InitDataAuthRequest,
@@ -87,32 +92,87 @@ async def get_current_user_id(authorization: Annotated[str | None, Header()] = N
             detail="Missing or invalid Authorization header",
         )
     token = authorization.split(" ", 1)[1]
+    user_id = None
     
     # 1. Try JWT decoding
     try:
         payload = jwt.decode(token, settings.jwt_secret.get_secret_value(), algorithms=["HS256"])
-        return int(payload["sub"])
+        user_id = int(payload["sub"])
     except Exception:
         pass
 
     # 2. Try Telegram initData verification
-    tg_user = repo.verify_telegram_init_data(token)
-    if tg_user:
-        profile, _ = await repo.get_or_create_user(tg_user)
-        return profile.user_id
+    if not user_id:
+        tg_user = repo.verify_telegram_init_data(token)
+        if tg_user:
+            profile, _ = await repo.get_or_create_user(tg_user)
+            user_id = profile.user_id
 
     # 3. Dev mode fallback
-    if token.startswith("dev_mode_"):
+    if not user_id and token.startswith("dev_mode_"):
         parts = token.split("_")
         dev_id = int(parts[-1]) if parts[-1].isdigit() else 965000782
         tg_user = {"id": dev_id, "first_name": "Тестовый Фрилансер", "username": "dev_user"}
         profile, _ = await repo.get_or_create_user(tg_user)
-        return profile.user_id
+        user_id = profile.user_id
 
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Invalid or expired authentication token",
-    )
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired authentication token",
+        )
+
+    if await repo.is_user_banned(user_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Ваш аккаунт заблокирован администратором.",
+        )
+
+    return user_id
+
+
+async def get_admin_user_id(authorization: Annotated[str | None, Header()] = None) -> int:
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing or invalid Authorization header",
+        )
+    token = authorization.split(" ", 1)[1]
+    user_id = None
+
+    try:
+        payload = jwt.decode(token, settings.jwt_secret.get_secret_value(), algorithms=["HS256"])
+        user_id = int(payload["sub"])
+    except Exception:
+        pass
+
+    if not user_id:
+        tg_user = repo.verify_telegram_init_data(token)
+        if tg_user:
+            profile, _ = await repo.get_or_create_user(tg_user)
+            user_id = profile.user_id
+
+    if not user_id and token.startswith("dev_mode_"):
+        parts = token.split("_")
+        dev_id = int(parts[-1]) if parts[-1].isdigit() else 965000782
+        tg_user = {"id": dev_id, "first_name": "Тестовый Фрилансер", "username": "dev_user"}
+        profile, _ = await repo.get_or_create_user(tg_user)
+        user_id = profile.user_id
+
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired authentication token",
+        )
+
+    admin_ids = settings.admin_telegram_ids
+    if admin_ids and user_id not in admin_ids:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: Admin privileges required",
+        )
+
+    return user_id
 
 
 
@@ -489,6 +549,77 @@ async def process_incoming_job(req: IncomingJobDTO):
     }
 
 
+# ---------------------------------------------------------------------------
+# Admin & User Management Router
+# ---------------------------------------------------------------------------
+
+admin_router = APIRouter(prefix="/api/admin", tags=["admin"])
+
+
+@admin_router.get("/check")
+async def check_admin_status(user_id: int = Depends(get_admin_user_id)):
+    return {"is_admin": True, "user_id": user_id}
+
+
+@admin_router.get("/stats", response_model=AdminStatsDTO)
+async def get_admin_stats(user_id: int = Depends(get_admin_user_id)):
+    return await repo.get_admin_stats()
+
+
+@admin_router.get("/users")
+async def get_admin_users(
+    page: int = 1,
+    limit: int = 20,
+    search: str = "",
+    status: str = "all",
+    user_id: int = Depends(get_admin_user_id),
+):
+    users, total = await repo.get_admin_users_list(page=page, limit=limit, search=search, status_filter=status)
+    return {
+        "items": users,
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "pages": (total + limit - 1) // limit if limit > 0 else 1,
+    }
+
+
+@admin_router.get("/users/{target_user_id}", response_model=AdminUserDetailDTO)
+async def get_admin_user_details(
+    target_user_id: int,
+    user_id: int = Depends(get_admin_user_id),
+):
+    details = await repo.get_admin_user_details(target_user_id)
+    if not details:
+        raise HTTPException(status_code=404, detail="User not found")
+    return details
+
+
+@admin_router.post("/users/{target_user_id}/subscription", response_model=UserProfileDTO)
+async def update_admin_user_subscription(
+    target_user_id: int,
+    req: AdminSubscriptionUpdateDTO,
+    user_id: int = Depends(get_admin_user_id),
+):
+    updated = await repo.update_user_subscription(target_user_id, req)
+    if not updated:
+        raise HTTPException(status_code=404, detail="User not found")
+    return updated
+
+
+@admin_router.post("/users/{target_user_id}/ban")
+async def set_admin_user_ban(
+    target_user_id: int,
+    req: AdminBanUpdateDTO,
+    user_id: int = Depends(get_admin_user_id),
+):
+    success = await repo.set_user_ban_status(target_user_id, req)
+    if not success:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"status": "success", "is_banned": req.is_banned, "ban_reason": req.ban_reason}
+
+
+app.include_router(admin_router)
 app.include_router(jobs_router)
 
 @app.middleware("http")
