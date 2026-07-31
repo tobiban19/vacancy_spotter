@@ -158,6 +158,18 @@ class DatabaseRepository:
         );
         CREATE INDEX IF NOT EXISTS idx_user_job_cards_user_id ON user_job_cards(user_id);
         """)
+
+        # Clean up duplicate channels if any exist
+        await self._conn.execute("""
+            DELETE FROM channels 
+            WHERE id NOT IN (
+                SELECT MIN(id) 
+                FROM channels 
+                GROUP BY profession_id, LOWER(username)
+            );
+        """)
+
+        await self._conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_channels_prof_user ON channels(profession_id, username);")
         
         # Additive migration for is_banned & ban_reason
         columns = await self._conn.execute("PRAGMA table_info(users);")
@@ -450,6 +462,7 @@ class DatabaseRepository:
         FROM channels c
         LEFT JOIN user_channels uc ON uc.channel_id = c.id AND uc.user_id = ?
         WHERE c.profession_id = ? AND c.is_active = 1
+        GROUP BY LOWER(c.username)
         """
         async with self._conn.execute(sql, (user_id, profession_id)) as cursor:
             async for row in cursor:
