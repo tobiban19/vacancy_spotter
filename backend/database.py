@@ -5,10 +5,23 @@ Multi-tenant SQLite Repository for Vacancy Spotter SaaS Backend.
 import hashlib
 import hmac
 import json
+import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 import aiosqlite
+
+
+def normalize_telegram_username(input_str: str) -> str:
+    if not input_str:
+        return ""
+    s = input_str.strip()
+    s = re.sub(r"^https?://", "", s, flags=re.IGNORECASE)
+    s = re.sub(r"^(?:t|telegram)\.(?:me|dog)/", "", s, flags=re.IGNORECASE)
+    s = re.sub(r"^s/", "", s, flags=re.IGNORECASE)
+    s = s.lstrip("@")
+    s = s.split("/")[0].split("?")[0]
+    return s.strip()
 
 from config import settings
 from models import (
@@ -487,15 +500,19 @@ class DatabaseRepository:
 
     async def add_custom_channel(self, user_id: int, profession_id: str, username_or_link: str) -> ChannelDTO:
         assert self._conn is not None
-        clean_user = username_or_link.strip().replace("https://t.me/", "").replace("@", "")
+        clean_user = normalize_telegram_username(username_or_link)
         cursor = await self._conn.execute(
-            "INSERT INTO channels (profession_id, username, title, is_recommended, is_active) VALUES (?, ?, ?, 0, 1)",
+            "INSERT INTO channels (profession_id, username, title, is_recommended, is_active) VALUES (?, ?, ?, 0, 1) ON CONFLICT(profession_id, username) DO UPDATE SET is_active = 1",
             (profession_id, clean_user, f"@{clean_user}")
         )
         ch_id = cursor.lastrowid
-        assert ch_id is not None
+        if not ch_id:
+            async with self._conn.execute("SELECT id FROM channels WHERE profession_id = ? AND username = ?", (profession_id, clean_user)) as c:
+                row = await c.fetchone()
+                ch_id = row["id"] if row else 1
+
         await self._conn.execute(
-            "INSERT INTO user_channels (user_id, channel_id, is_enabled) VALUES (?, ?, 1)",
+            "INSERT INTO user_channels (user_id, channel_id, is_enabled) VALUES (?, ?, 1) ON CONFLICT(user_id, channel_id) DO UPDATE SET is_enabled = 1",
             (user_id, ch_id)
         )
         await self._conn.commit()
@@ -510,7 +527,7 @@ class DatabaseRepository:
 
     async def get_users_subscribed_to_channel(self, channel_username: str) -> list[UserProfileDTO]:
         assert self._conn is not None
-        clean_user = channel_username.strip().replace("https://t.me/", "").replace("@", "").lower()
+        clean_user = normalize_telegram_username(channel_username).lower()
         sql = """
         SELECT DISTINCT u.*
         FROM users u
