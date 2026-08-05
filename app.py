@@ -33,9 +33,20 @@ def start_services_in_thread():
         server_task = asyncio.create_task(server.serve())
         polling_task = asyncio.create_task(dp.start_polling(bot, handle_signals=False))
 
+        tasks = [server_task, polling_task]
+
+        # Start Telethon Channel Parser (MTProto listener for vacancy channels)
+        try:
+            from telethon_parser import start_parser
+            parser_task = asyncio.create_task(start_parser())
+            tasks.append(parser_task)
+            print("📡 Telethon Channel Parser integrated & started.")
+        except Exception as exc:
+            print(f"⚠️ Could not start Telethon parser: {exc}")
+
         print("🚀 Vacancy Spotter SaaS Backend & Bot started in Gradio Space!")
         try:
-            await asyncio.gather(server_task, polling_task)
+            await asyncio.gather(*tasks)
         finally:
             await repo.close()
 

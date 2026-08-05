@@ -255,6 +255,170 @@ async def cmd_stats(message: Message) -> None:
     await message.answer(msg, parse_mode=ParseMode.HTML)
 
 
+def _is_admin(user_id: int) -> bool:
+    return user_id in settings.admin_telegram_ids
+
+
+@router.message(Command("debug"))
+async def cmd_debug(message: Message) -> None:
+    """Admin-only: show system diagnostics."""
+    if not message.from_user or not _is_admin(message.from_user.id):
+        return
+
+    bot = get_bot()
+    try:
+        bot_info = await bot.get_me()
+        bot_name = f"@{bot_info.username}" if bot_info.username else "unknown"
+        bot_id = str(bot_info.id) if bot_info else "?"
+    except Exception:
+        bot_name = "error"
+        bot_id = "?"
+
+    token_pfx = settings.bot_token.get_secret_value()[:10] + "..."
+
+    # Parser stats (imported lazily to avoid circular imports)
+    try:
+        from telethon_parser import parser_stats
+        parser_section = (
+            f"📡 <b>Telethon Parser:</b>\n"
+            f"  • Статус: {'🟢 Работает' if parser_stats.is_running else '🔴 Не запущен'}\n"
+            f"  • Старт: <code>{parser_stats.started_at or 'N/A'}</code>\n"
+            f"  • Последняя активность: <code>{parser_stats.last_activity_at or 'Нет'}</code>\n"
+            f"  • Последний канал: {parser_stats.last_channel or 'N/A'}\n"
+            f"  • Сообщений увидено: <b>{parser_stats.messages_seen}</b>\n"
+            f"  • Совпадений по ключевым: <b>{parser_stats.keywords_matched}</b>\n"
+            f"  • Карточек отправлено: <b>{parser_stats.cards_sent}</b>\n"
+            f"  • Ошибок отправки: <b>{parser_stats.cards_failed}</b>\n"
+        )
+        if parser_stats.recent_trace_ids:
+            traces_str = ", ".join(f"<code>{t}</code>" for t in parser_stats.recent_trace_ids[:5])
+            parser_section += f"  • Последние trace_id: {traces_str}\n"
+    except Exception as exc:
+        parser_section = f"📡 <b>Telethon Parser:</b> ⚠️ Не удалось получить статус ({exc})\n"
+
+    # Recent trace events from DB
+    trace_section = ""
+    try:
+        if repo._conn is None:
+            await repo.open()
+        recent = await repo.get_recent_traces(limit=5)
+        if recent:
+            trace_section = "\n📜 <b>Последние 5 trace-событий:</b>\n"
+            for t in recent:
+                ts = t["created_at"][:19] if t.get("created_at") else "?"
+                trace_section += (
+                    f"  <code>[{t['trace_id']}]</code> {t['event']}"
+                    f" | {t.get('channel', '')} | card={t.get('card_id', '-')}"
+                    f" | {ts}\n"
+                )
+        else:
+            trace_section = "\n📜 <i>Нет trace-событий в БД.</i>\n"
+    except Exception:
+        trace_section = "\n📜 <i>Ошибка чтения trace из БД.</i>\n"
+
+    text = (
+        f"🔧 <b>DIAGNOSTIC DEBUG</b>\n\n"
+        f"🤖 <b>Бот:</b>\n"
+        f"  • Username: <b>{bot_name}</b>\n"
+        f"  • Bot ID: <code>{bot_id}</code>\n"
+        f"  • Token: <code>{token_pfx}</code>\n\n"
+        f"{parser_section}\n"
+        f"{trace_section}\n"
+        f"<i>Используйте /trace &lt;url или card_id&gt; для поиска конкретного поста.</i>"
+    )
+    await message.answer(text, parse_mode=ParseMode.HTML)
+
+
+@router.message(Command("trace"))
+async def cmd_trace(message: Message) -> None:
+    """Admin-only: trace a specific post through the pipeline."""
+    if not message.from_user or not _is_admin(message.from_user.id):
+        return
+
+    args = (message.text or "").split(maxsplit=1)
+    if len(args) < 2 or not args[1].strip():
+        await message.answer(
+            "🔍 <b>Использование:</b>\n\n"
+            "<code>/trace https://t.me/channel/123</code> — по URL поста\n"
+            "<code>/trace 42</code> — по ID карточки\n"
+            "<code>/trace a1b2c3d4</code> — по trace_id\n"
+            "<code>/trace last</code> — последние 10 событий",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+
+    query = args[1].strip()
+
+    if repo._conn is None:
+        await repo.open()
+
+    traces: list[dict] = []
+
+    if query.lower() == "last":
+        traces = await repo.get_recent_traces(limit=10)
+        header = "📜 <b>Последние 10 событий:</b>"
+    elif query.isdigit():
+        card_id = int(query)
+        traces = await repo.get_traces_by_card_id(card_id)
+        if not traces:
+            # Try as trace_id
+            traces = await repo.get_traces_by_trace_id(query)
+        header = f"📜 <b>Trace для card_id={card_id}:</b>"
+    elif len(query) == 8 and all(c in "0123456789abcdef" for c in query):
+        traces = await repo.get_traces_by_trace_id(query)
+        header = f"📜 <b>Trace для ID {query}:</b>"
+    else:
+        traces = await repo.get_traces_by_url(query)
+        header = f"📜 <b>Trace для URL содержащий:</b> <code>{html.escape(query[:50])}</code>"
+
+    if not traces:
+        await message.answer(
+            f"🔍 Ничего не найдено по запросу: <code>{html.escape(query[:80])}</code>\n\n"
+            "<i>Возможные причины:\n"
+            "• Пост не проходил через парсер\n"
+            "• Ключевые слова не совпали\n"
+            "• Записи были очищены (хранятся последние 500)</i>",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+
+    lines = [header, ""]
+    for t in traces:
+        ts = t["created_at"][:19] if t.get("created_at") else "?"
+        event_icon = {
+            "received": "📥", "users_matched": "👤", "no_subscribers": "🚫",
+            "stop_word_filtered": "⛔", "card_created": "📋",
+            "card_sent": "✅", "card_send_failed": "⚠️",
+            "card_send_error": "❌", "pipeline_error": "💥",
+        }.get(t["event"], "•")
+
+        line = f"{event_icon} <code>[{t['trace_id']}]</code> <b>{t['event']}</b>"
+        if t.get("channel"):
+            line += f" | {t['channel']}"
+        if t.get("user_id"):
+            line += f" | user={t['user_id']}"
+        if t.get("card_id"):
+            line += f" | card=#{t['card_id']}"
+        if t.get("bot_username"):
+            line += f" | bot={t['bot_username']}"
+        if t.get("bot_token_prefix"):
+            line += f" | token={t['bot_token_prefix']}..."
+        line += f"\n  ⏰ {ts}"
+        if t.get("detail"):
+            detail = html.escape(t["detail"][:120])
+            line += f"\n  💬 {detail}"
+        if t.get("post_snippet"):
+            snippet = html.escape(t["post_snippet"][:80])
+            line += f"\n  📝 {snippet}..."
+        lines.append(line)
+        lines.append("")
+
+    text = "\n".join(lines)
+    # Telegram message limit is 4096 chars
+    if len(text) > 4000:
+        text = text[:4000] + "\n\n<i>... обрезано (слишком длинный ответ)</i>"
+    await message.answer(text, parse_mode=ParseMode.HTML)
+
 @router.callback_query(F.data.startswith("approve:"))
 async def process_approve_job_card(query: CallbackQuery) -> None:
     if not query.from_user or not query.data:

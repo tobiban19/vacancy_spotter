@@ -38,11 +38,20 @@ async def run_services():
     server_task = asyncio.create_task(server.serve())
     polling_task = asyncio.create_task(dp.start_polling(bot))
 
+    tasks = [server_task, polling_task]
+    try:
+        from telethon_parser import start_parser
+        parser_task = asyncio.create_task(start_parser())
+        tasks.append(parser_task)
+        log.info("📡 Telethon Channel Parser integrated & started.")
+    except Exception as exc:
+        log.warning("Could not start Telethon parser in server.py: %s", exc)
+
     log.info("🚀 Vacancy Spotter SaaS Backend & Bot started successfully!")
     log.info(f"📱 Mini App Web Cabinet available at: http://{host}:{port}/app")
     
     try:
-        await asyncio.gather(server_task, polling_task)
+        await asyncio.gather(*tasks)
     finally:
         await repo.close()
 

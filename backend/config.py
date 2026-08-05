@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     telegram_proxy: str | None = None
     admin_chat_id: int = 965000782
     admin_telegram_ids_raw: str = Field(default="", validation_alias="ADMIN_TELEGRAM_IDS")
+    telegram_api_id: int = 31703569
+    telegram_api_hash: SecretStr = SecretStr("93bf3b90dbed4fcf31c7cb71a065daa5")
 
     @property
     def admin_telegram_ids(self) -> list[int]:

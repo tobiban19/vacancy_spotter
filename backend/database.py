@@ -170,6 +170,23 @@ class DatabaseRepository:
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         );
         CREATE INDEX IF NOT EXISTS idx_user_job_cards_user_id ON user_job_cards(user_id);
+
+        CREATE TABLE IF NOT EXISTS pipeline_trace (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            trace_id TEXT NOT NULL,
+            event TEXT NOT NULL,
+            channel TEXT DEFAULT '',
+            post_url TEXT DEFAULT '',
+            post_snippet TEXT DEFAULT '',
+            user_id BIGINT DEFAULT NULL,
+            card_id INTEGER DEFAULT NULL,
+            bot_username TEXT DEFAULT '',
+            bot_token_prefix TEXT DEFAULT '',
+            detail TEXT DEFAULT '',
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_pipeline_trace_url ON pipeline_trace(post_url);
+        CREATE INDEX IF NOT EXISTS idx_pipeline_trace_trace_id ON pipeline_trace(trace_id);
         """)
 
         # Clean up duplicate channels if any exist
@@ -226,20 +243,15 @@ class DatabaseRepository:
             hash_check = parsed.pop("hash")
             data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(parsed.items()))
 
-            tokens_to_try = [
-                settings.bot_token.get_secret_value(),
-                "8886211498:AAH3rx9IOOi4Jr_ZSxkabwDPjTuD1oe_Dn0",
-                "8773545660:AAGPplIVVR5MoAzXI4LB-2D1wFGjjr0eZ3E",
-            ]
-            for bot_token in tokens_to_try:
-                if not bot_token or bot_token == "placeholder_token":
-                    continue
-                secret_key = hmac.new(b"WebAppData", bot_token.encode(), hashlib.sha256).digest()
-                calculated_hash = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
+            bot_token = settings.bot_token.get_secret_value()
+            if not bot_token or bot_token == "placeholder_token":
+                return None
+            secret_key = hmac.new(b"WebAppData", bot_token.encode(), hashlib.sha256).digest()
+            calculated_hash = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
 
-                if hmac.compare_digest(calculated_hash, hash_check):
-                    user_data = json.loads(parsed.get("user", "{}"))
-                    return user_data
+            if hmac.compare_digest(calculated_hash, hash_check):
+                user_data = json.loads(parsed.get("user", "{}"))
+                return user_data
         except Exception:
             return None
         return None
@@ -951,4 +963,78 @@ class DatabaseRepository:
         await self._conn.commit()
         return cursor.rowcount > 0
 
+    # ---------------------------------------------------------------------------
+    # Pipeline Tracing & Diagnostics
+    # ---------------------------------------------------------------------------
 
+    async def log_trace(
+        self,
+        trace_id: str,
+        event: str,
+        *,
+        channel: str = "",
+        post_url: str = "",
+        post_snippet: str = "",
+        user_id: int | None = None,
+        card_id: int | None = None,
+        bot_username: str = "",
+        bot_token_prefix: str = "",
+        detail: str = "",
+    ) -> None:
+        """Record a pipeline trace event. Auto-prunes to keep last 500 rows."""
+        assert self._conn is not None
+        now = datetime.now(timezone.utc).isoformat()
+        await self._conn.execute(
+            """INSERT INTO pipeline_trace
+               (trace_id, event, channel, post_url, post_snippet, user_id, card_id,
+                bot_username, bot_token_prefix, detail, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (trace_id, event, channel, post_url, post_snippet[:100] if post_snippet else "",
+             user_id, card_id, bot_username, bot_token_prefix, detail, now),
+        )
+        await self._conn.commit()
+        # Auto-prune: keep only latest 500 entries
+        await self._conn.execute(
+            "DELETE FROM pipeline_trace WHERE id NOT IN (SELECT id FROM pipeline_trace ORDER BY id DESC LIMIT 500)"
+        )
+        await self._conn.commit()
+
+    async def get_traces_by_url(self, url_fragment: str, limit: int = 20) -> list[dict]:
+        """Find trace events matching a post URL fragment."""
+        assert self._conn is not None
+        async with self._conn.execute(
+            "SELECT * FROM pipeline_trace WHERE post_url LIKE ? ORDER BY id DESC LIMIT ?",
+            (f"%{url_fragment}%", limit),
+        ) as cursor:
+            rows = await cursor.fetchall()
+        return [dict(row) for row in rows]
+
+    async def get_traces_by_card_id(self, card_id: int, limit: int = 20) -> list[dict]:
+        """Find trace events for a specific card_id."""
+        assert self._conn is not None
+        async with self._conn.execute(
+            "SELECT * FROM pipeline_trace WHERE card_id = ? ORDER BY id DESC LIMIT ?",
+            (card_id, limit),
+        ) as cursor:
+            rows = await cursor.fetchall()
+        return [dict(row) for row in rows]
+
+    async def get_traces_by_trace_id(self, trace_id: str) -> list[dict]:
+        """Get all events for a specific trace_id."""
+        assert self._conn is not None
+        async with self._conn.execute(
+            "SELECT * FROM pipeline_trace WHERE trace_id = ? ORDER BY id ASC",
+            (trace_id,),
+        ) as cursor:
+            rows = await cursor.fetchall()
+        return [dict(row) for row in rows]
+
+    async def get_recent_traces(self, limit: int = 20) -> list[dict]:
+        """Get most recent trace events."""
+        assert self._conn is not None
+        async with self._conn.execute(
+            "SELECT * FROM pipeline_trace ORDER BY id DESC LIMIT ?",
+            (limit,),
+        ) as cursor:
+            rows = await cursor.fetchall()
+        return [dict(row) for row in rows]
