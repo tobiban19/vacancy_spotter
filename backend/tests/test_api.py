@@ -68,7 +68,7 @@ async def test_multi_tenant_backend():
     # 5. Check Channels per Profession
     channels1 = await repo.get_user_channels(1001, "video_editor")
     assert len(channels1) > 0
-    assert any("freelance_video" in c.username for c in channels1)
+    assert any("editors_video" in c.username for c in channels1)
 
     # Add custom channel for User 1
     custom_ch = await repo.add_custom_channel(1001, "video_editor", "@my_private_jobs")

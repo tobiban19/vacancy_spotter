@@ -52,21 +52,26 @@ DEFAULT_PROFESSIONS = [
 ]
 
 DEFAULT_CHANNELS = [
-    # Video Editing & Videography
-    {"profession_id": "video_editor", "username": "freelance_video", "title": "Видеомонтаж | Фриланс Заказы"},
-    {"profession_id": "video_editor", "username": "reels_orders", "title": "Reels / Shorts / TikTok Заказы"},
-    {"profession_id": "video_editor", "username": "kinomontage_jobs", "title": "Кино & Видео Монтаж"},
-    
-    # Motion Design
-    {"profession_id": "motion_designer", "username": "motion_jobs", "title": "Motion Design & VFX Jobs"},
-    {"profession_id": "motion_designer", "username": "cg_freelance", "title": "3D & Graphic Freelance"},
-    
-    # Copywriting
-    {"profession_id": "copywriter", "username": "copywriter_jobs", "title": "Копирайтинг и Сценарии"},
-    {"profession_id": "copywriter", "username": "text_orders", "title": "Тексты & Редактура"},
+    # Video Editing & Reels — dedicated vacancy channels
+    {"profession_id": "video_editor", "username": "editors_video", "title": "Монтажеры/Рилс-мейкеры | заказы и вакансии"},
+    {"profession_id": "video_editor", "username": "vakansii_reelsmaker", "title": "Вакансии Рилс-мейкерам"},
+    {"profession_id": "video_editor", "username": "prodjob", "title": "Работа видеопродакшн 🎬"},
+    {"profession_id": "video_editor", "username": "zababos", "title": "ВИДОСЫ ЗА БАБОСЫ"},
 
-    # SMM
-    {"profession_id": "smm_specialist", "username": "smm_vacancies", "title": "SMM & Трафик Вакансии"},
+    # General Freelance — multi-profession channels
+    {"profession_id": "video_editor", "username": "jetlagchat", "title": "Jetlag Chat"},
+    {"profession_id": "video_editor", "username": "forallmedia", "title": "Job for Media & Content"},
+    {"profession_id": "video_editor", "username": "dddwork", "title": "Работа в медиа"},
+    {"profession_id": "video_editor", "username": "mediajobs_ru", "title": "mediajobs | вакансии"},
+    {"profession_id": "video_editor", "username": "FreelanceBay", "title": "Бухта Фриланса"},
+    {"profession_id": "video_editor", "username": "Koteyka_Freelancer", "title": "Фриланс Котики"},
+    {"profession_id": "video_editor", "username": "vdhl_good", "title": "ВДХЛ - Вакансии для хороших людей"},
+    {"profession_id": "video_editor", "username": "distantsiya2", "title": "ВАКАНСИИ фрилансеру"},
+    {"profession_id": "video_editor", "username": "rueventjob", "title": "Удалённая творческая работа"},
+    {"profession_id": "video_editor", "username": "huggabletalents", "title": "A-Teams | Карьера"},
+
+    # Design
+    {"profession_id": "graphic_designer", "username": "pjdaytezakazi", "title": "Горе от дизайна"},
 ]
 
 
@@ -222,11 +227,37 @@ class DatabaseRepository:
                 "INSERT OR IGNORE INTO professions (id, title_ru, icon_emoji) VALUES (?, ?, ?)",
                 (p.id, p.title_ru, p.icon_emoji)
             )
+
+        # One-time migration: remove old placeholder channels that don't exist in Telegram
+        _FAKE_CHANNELS = (
+            'freelance_video', 'reels_orders', 'kinomontage_jobs',
+            'motion_jobs', 'cg_freelance', 'copywriter_jobs',
+            'text_orders', 'smm_vacancies',
+        )
+        placeholders = ",".join("?" for _ in _FAKE_CHANNELS)
+        # Delete user_channels links to fake channels first (FK constraint)
+        await self._conn.execute(
+            f"DELETE FROM user_channels WHERE channel_id IN (SELECT id FROM channels WHERE LOWER(username) IN ({placeholders}))",
+            tuple(c.lower() for c in _FAKE_CHANNELS),
+        )
+        await self._conn.execute(
+            f"DELETE FROM channels WHERE LOWER(username) IN ({placeholders})",
+            tuple(c.lower() for c in _FAKE_CHANNELS),
+        )
+
+        # Seed real channels
         for c in DEFAULT_CHANNELS:
             await self._conn.execute(
                 "INSERT OR IGNORE INTO channels (profession_id, username, title, is_recommended, is_active) VALUES (?, ?, ?, 1, 1)",
                 (c["profession_id"], c["username"], c["title"])
             )
+
+        # Auto-subscribe all existing users to new default channels for their profession
+        async with self._conn.execute("SELECT id, profession_id FROM users") as cursor:
+            users = await cursor.fetchall()
+        for u in users:
+            await self.sync_default_channels_for_user(u["id"], u["profession_id"])
+
         await self._conn.commit()
 
     # ---------------------------------------------------------------------------

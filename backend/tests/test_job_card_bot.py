@@ -144,21 +144,21 @@ async def test_callback_query_approve_and_skip(test_env):
 async def test_incoming_jobs_api_and_stop_words(test_env):
     test_repo, client = test_env
 
-    # Create User 1 (Subscribed to default channel freelance_video, no stop-words)
+    # Create User 1 (Subscribed to default channel editors_video, no stop-words)
     user_1_id = 777001
     await test_repo.get_or_create_user({"id": user_1_id, "first_name": "User One"})
 
-    # Create User 2 (Subscribed to default channel freelance_video, HAS stop-word "казино")
+    # Create User 2 (Subscribed to default channel editors_video, HAS stop-word "казино")
     user_2_id = 777002
     await test_repo.get_or_create_user({"id": user_2_id, "first_name": "User Two"})
     await test_repo.update_user_profile(user_2_id, UserProfileUpdateDTO(stop_words=["казино", "crypto"]))
 
     # Test POST /api/jobs/incoming with a post containing "казино"
     payload = {
-        "channel_username": "freelance_video",
+        "channel_username": "editors_video",
         "post_text": "Ищем монтажёра для роликов Казино и Гемблинг!",
-        "post_url": "https://t.me/freelance_video/555",
-        "channel_title": "Видеомонтаж | Фриланс Заказы",
+        "post_url": "https://t.me/editors_video/555",
+        "channel_title": "Монтажеры/Рилс-мейкеры | заказы и вакансии",
     }
 
     with patch("bot_service.send_job_card_to_user", new_callable=AsyncMock) as mock_send:
@@ -173,7 +173,7 @@ async def test_incoming_jobs_api_and_stop_words(test_env):
         # Check DB cards for User 1
         user_1_cards = await test_repo.get_user_job_cards(user_1_id)
         assert len(user_1_cards) == 1
-        assert user_1_cards[0].channel_username == "freelance_video"
+        assert user_1_cards[0].channel_username == "editors_video"
 
         # Check DB cards for User 2 (must be 0!)
         user_2_cards = await test_repo.get_user_job_cards(user_2_id)
