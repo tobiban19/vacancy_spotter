@@ -6,15 +6,19 @@ import paramiko
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')
 
-HOST = "72.56.79.35"
-USER = "root"
-PASSWORD = "cVq5,#L?xJy_L6"
+# --- VPS connection details are read from the environment, never hardcoded. ---
+# Set them before running, e.g.:
+#   VPS_HOST=... VPS_USER=root VPS_PASSWORD=... python scripts/deploy.py
+# or use SSH key auth by leaving VPS_PASSWORD unset and configuring an SSH agent/key.
+HOST = os.environ.get("VPS_HOST", "")
+USER = os.environ.get("VPS_USER", "root")
+PASSWORD = os.environ.get("VPS_PASSWORD", "")
 REMOTE_DIR = "/opt/vacancy-spotter-app"
 LOCAL_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 LOCAL_FRONTEND_DIR = os.path.join(LOCAL_DIR, "frontend")
 
 IGNORE_DIRS = {".venv", "__pycache__", ".git", ".idea", ".vscode", ".pytest_cache", "node_modules"}
-IGNORE_FILES = {".gitignore"}
+IGNORE_FILES = {".gitignore", ".env"}
 
 def run_local_preflight_checks():
     print("\n==========================================")
@@ -40,8 +44,22 @@ def run_local_preflight_checks():
     
     # 3. Commit and Push to GitHub & Deploy directly to Vercel
     print("\n[Gate 3/4] Pushing latest build to GitHub...")
-    subprocess.run(["git", "add", "."], cwd=LOCAL_DIR)
-    subprocess.run(["git", "commit", "-m", "deploy: sync latest build & vercel config"], cwd=LOCAL_DIR)
+    # Only stage explicitly tracked changes — avoid sweeping secrets/scratch files
+    # into history via a blanket `git add .`. We add by known paths and commit
+    # only if there is something staged.
+    subprocess.run(["git", "add", "-u"], cwd=LOCAL_DIR)
+    # Stage freshly-built frontend assets that are meant to ship.
+    subprocess.run(["git", "add", "frontend/dist"], cwd=LOCAL_DIR)
+    status = subprocess.run(
+        ["git", "diff", "--cached", "--quiet"], cwd=LOCAL_DIR
+    )
+    if status.returncode != 0:
+        subprocess.run(
+            ["git", "commit", "-m", "deploy: sync latest build & vercel config"],
+            cwd=LOCAL_DIR,
+        )
+    else:
+        print("ℹ️ No staged changes to commit, skipping commit step.")
     res_push = subprocess.run(["git", "push", "origin", "main"], cwd=LOCAL_DIR)
     if res_push.returncode == 0:
         print("✅ Git push successful!")
@@ -71,12 +89,26 @@ def exec_cmd(ssh, cmd):
     return exit_status, out, err
 
 def main():
+    if not HOST:
+        print("❌ VPS_HOST environment variable is not set. Aborting deployment.")
+        print("   Set it (and optionally VPS_USER, VPS_PASSWORD) before running:")
+        print("   VPS_HOST=1.2.3.4 VPS_USER=root VPS_PASSWORD=... python scripts/deploy.py")
+        sys.exit(1)
+
     run_local_preflight_checks()
 
     print(f"Connecting to {HOST} as {USER} for SaaS deployment...")
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    ssh.connect(HOST, username=USER, password=PASSWORD, timeout=15)
+    # Prefer key-based auth; fall back to password only if explicitly provided.
+    ssh.connect(
+        HOST,
+        username=USER,
+        password=PASSWORD or None,
+        timeout=15,
+        allow_agent=not bool(PASSWORD),
+        look_for_keys=not bool(PASSWORD),
+    )
     print("SSH Connection established!")
 
     # 1. Create remote directory

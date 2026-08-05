@@ -63,61 +63,64 @@
    - `draft_reply` (TEXT) — Автоматически сгенерированный проект сопроводительного письма (ИИ).
    - `created_at` (TEXT).
 
-7. **`trace_logs`** — Журнал трейсинга обработки парсера:
-   - `id` (INTEGER PRIMARY KEY AUTOINCREMENT).
-   - `trace_id` (TEXT) — Уникальный хэш цепочки обработки.
-   - `event` (TEXT), `payload_json` (TEXT), `timestamp` (TEXT).
+7. **`pipeline_trace`** — Журнал трейсинга обработки парсера (хранит последние 500 записей, автопрунинг):
+   - `id`, `trace_id` (TEXT) — Уникальный 8-символьный ID цепочки обработки.
+   - `event` (TEXT) — Тип события (`received`, `non_vacancy_chat`, `users_matched`, `no_subscribers`, `stop_word_filtered`, `card_created`, `card_sent`, `card_send_failed`, `card_send_error`, `pipeline_error`).
+   - `channel`, `post_url`, `post_snippet`, `user_id`, `card_id`, `bot_username`, `bot_token_prefix`, `detail`, `created_at`.
 
-8. **`subscription_requests`** — Заявки на оплату подписки переводом по карте (СБП):
-   - `id` (INTEGER PRIMARY KEY AUTOINCREMENT).
-   - `user_id` (INTEGER), `plan` (TEXT), `amount` (INTEGER), `status` (TEXT DEFAULT 'pending'), `created_at` (TEXT).
+> **Примечание:** отдельной таблицы `subscription_requests` нет — обработка заявок на оплату идёт через inline-кнопки в чате администратора (`admin_approve:` / `admin_reject:` callback'и в `bot_service.py`), а продление подписки вызывает метод `repo.extend_user_subscription()`.
 
 ---
 
 ## 2. Спецификация REST API (`backend/api.py`)
 
-Все приватные маршруты защищены авторизацией `Bearer JWT_TOKEN`.  
-Токен выдаётся методом POST `/api/auth/verify` после успешной валидации `initData` Telegram WebApp по алгоритму HMAC-SHA256.
+Все приватные маршруты защищены авторизацией `Bearer JWT_TOKEN` (проверка через зависимости `get_current_user_id` / `get_admin_user_id`). Токен выдаётся эндпоинтом `POST /api/auth/tma` после успешной валидации `initData` Telegram WebApp по алгоритму HMAC-SHA256. JWT содержит `sub`, `iat` и `exp` (срок жизни — `JWT_EXPIRE_HOURS`, по умолчанию 7 дней).
 
 ### 2.1 Авторизация (`/api/auth`)
-- **`POST /api/auth/verify`**
-  - **Тело запроса**: `InitDataAuthRequest` (`init_data`: str).
-  - **Описание**: Проверяет подпись HMAC `window.Telegram.WebApp.initData`, создает или обновляет запись пользователя в БД (назначая 2 дня демо-периода новым юзерам) и возвращает JWT токен.
+- **`POST /api/auth/verify`**: Проверяет подпись HMAC `initData` и возвращает `{ valid, data }`. **Не создаёт пользователя и не выдаёт JWT** — это диагностический эндпоинт.
+- **`POST /api/auth/tma`**: Основной логин Mini App. Проверяет `initData`, создаёт/обновляет пользователя в БД (новым юзерам назначается демо-период `DEMO_DURATION_DAYS`), возвращает `TokenResponse` с `access_token` (JWT).
 
 ### 2.2 Профиль и Настройки (`/api/profile`)
 - **`GET /api/profile`**: Возвращает профиль текущего пользователя (`UserProfileDTO`).
 - **`PUT /api/profile`**: Обновляет данные профиля (профессию, стаж, стоп-слова, стек, о себе).
-- **`POST /api/profile/upload-resume`**: Парсит загруженный PDF-файл резюме (`UploadFile`) через `pypdf`, извлекает опыт и навыки и автозаполняет профиль.
-- **`GET /api/professions`**: Возвращает доступный список профессий.
+- **`POST /api/profile/parse_pdf`**: Парсит загруженный PDF-файл резюме (`UploadFile`) через `pypdf`, извлекает текст (до 2000 символов) и возвращает его для автозаполнения профиля.
 
 ### 2.3 Портфолио (`/api/portfolio`)
 - **`GET /api/portfolio`**: Получение всех кейсов пользователя.
 - **`POST /api/portfolio`**: Добавление нового элемента портфолио.
+- **`PUT /api/portfolio/{item_id}`**: Обновление элемента портфолио.
 - **`DELETE /api/portfolio/{item_id}`**: Удаление элемента портфолио.
 
 ### 2.4 Каналы Вакансий (`/api/channels`)
 - **`GET /api/channels`**: Получение списка отслеживаемых каналов для текущей профессии.
-- **`POST /api/channels/custom`**: Добавление своего кастомного Telegram-канала по username.
-- **`DELETE /api/channels/custom/{username}`**: Удаление кастомного канала.
+- **`POST /api/channels/toggle`**: Включение/выключение канала для пользователя.
+- **`POST /api/channels/custom`**: Добавление своего кастомного Telegram-канала по username или ссылке.
 
 ### 2.5 Карточки Вакансий (`/api/cards`)
-- **`GET /api/cards?status=new`**: Список карточек вакансий пользователя с фильтрацией по статусу.
-- **`PUT /api/cards/{card_id}/status`**: Обновление статуса карточки (`new`, `saved`, `applied`, `rejected`).
-- **`POST /api/cards/{card_id}/regenerate`**: Перегенерация черновика отклика с учетом текущего профиля.
+- **`GET /api/cards?status_filter=new`**: Список карточек вакансий пользователя с опциональной фильтрацией по статусу (`new`, `saved`, `applied`, `rejected`, `hidden`).
+- **`PUT /api/cards/{card_id}/status`**: Обновление статуса карточки. Тело: `{ "status": "new|saved|applied|rejected|hidden" }`.
+- **`POST /api/cards/{card_id}/regenerate`**: Перегенерация черновика отклика с учётом текущего профиля. Тело: `{ "custom_instruction": "..." }`.
 
 ### 2.6 Подписка и Оплаты (`/api/subscription`)
-- **`GET /api/subscription/status`**: Информация о текущей подписке и оставшихся днях.
-- **`POST /api/subscription/card-request`**: Отправка заявки на активацию подписки после оплаты по реквизитам СБП.
+- **`GET /api/subscription`**: Информация о текущей подписке и оставшихся днях.
+- **`POST /api/subscription/request_card`**: Отправка заявки администратору на активацию подписки после оплаты по реквизитам карты. Тело: `{ "plan": "week|month", "receipt_info": "...", "receipt_file_b64": "...", "receipt_filename": "..." }`. Заявка приходит админу в Telegram с кнопками одобрения/отклонения.
 
-### 2.7 Админ-Панель (`/api/admin/*`)
-Защищена проверкой Telegram ID пользователя по списку `ADMIN_TELEGRAM_IDS`.
-- **`GET /api/admin/stats`**: Статистика (всего пользователей, активных подписок, обработанных карточек).
-- **`GET /api/admin/users`**: Список всех пользователей с пагинацией и поиском.
+### 2.7 Профессии (`/api/professions`)
+- **`GET /api/professions`**: Список доступных профессий. Является единым источником правды для фронтенда.
+
+### 2.8 Вебхук парсера (`/api/jobs/incoming`)
+- **`POST /api/jobs/incoming`**: Внутренний эндпоинт инъекции постов из Telegram-каналов. **Защищён**: при заданном `JOBS_WEBHOOK_SECRET` требует заголовок `X-Webhook-Secret`. Создаёт карточки и отправляет их подписчикам. В штатном режиме не используется — основной поток идёт через Telethon MTProto-парсер.
+
+### 2.9 Админ-Панель (`/api/admin/*`)
+Защищена проверкой Telegram ID пользователя по списку `ADMIN_TELEGRAM_IDS` (через `get_admin_user_id`).
+- **`GET /api/admin/check`**: Проверка, является ли текущий пользователь администратором.
+- **`GET /api/admin/stats`**: Статистика (всего пользователей, активных/демо/истёкших/заблокированных).
+- **`GET /api/admin/users?page&limit&search&status`**: Список пользователей с пагинацией и фильтром.
 - **`GET /api/admin/users/{user_id}`**: Детальная информация о пользователе.
-- **`PUT /api/admin/users/{user_id}/subscription`**: Продление/изменение подписки пользователя вручную.
-- **`PUT /api/admin/users/{user_id}/ban`**: Блокировка/разблокировка пользователя.
-- **`GET /api/admin/subscription-requests`**: Список pending заявок на оплату.
-- **`POST /api/admin/subscription-requests/{req_id}/approve`**: Одобрение оплаты и продление подписки.
+- **`POST /api/admin/users/{user_id}/subscription`**: Управление подпиской (`add_days`, `set_status`, `revoke`).
+- **`POST /api/admin/users/{user_id}/ban`**: Блокировка/разблокировка пользователя.
+
+> **Примечание:** заявки на оплату обрабатываются inline-кнопками прямо в чате администратора (`admin_approve:` / `admin_reject:` callback'и в `bot_service.py`). Отдельной таблицы `subscription_requests` и REST-эндпоинтов для этого нет.
 
 ---
 
@@ -125,16 +128,21 @@
 
 1. **MTProto Слушатель (`telethon_parser.py`)**:
    - Работает через клиент Telethon для связи с Telegram MTProto API.
-   - В реальном времени получает посты из подплановых каналов.
-   - **Фильтр интента вакансии**: Вызывает `is_vacancy_post(event.text)`. Если сообщение является чатовым вопросом или флудом, пост отклоняется (`non_vacancy_chat`).
-   - Для подписчиков канала запускает генерацию ИИ-отклика `generate_draft_reply(u, event.text)`.
+   - В реальном времени получает посты из отслеживаемых каналов.
+   - **Двухуровневый фильтр**:
+     1. `KEYWORDS` — расширенный набор терминов по всем профессиям (видео, motion/3D, веб-дизайн, копирайтинг, SMM). Пост без совпадений по ключевым словам отбрасывается сразу.
+     2. **Фильтр интента вакансии**: `is_vacancy_post(event.text)`. Если сообщение является чатовым вопросом или флудом, пост отклоняется (`non_vacancy_chat`).
+   - Для подписчиков канала запускает генерацию ИИ-отклика `await generate_draft_reply(u, event.text)`.
    - Записывает карточку `JobCardCreateDTO(..., draft_reply=draft)` в SQLite БД и отправляет уведомление в Telegram-бот.
 
 2. **Движок Фильтрации и ИИ-Откликов (`matching_service.py`)**:
    - `is_vacancy_post(text: str) -> tuple[bool, float, list[str]]`:
      Анализирует текст на коммерческие триггеры найма (`ищу`, `требуется`, `оплата`, `бюджет`, `тз`, `в команду`, `отклик`, контакты) и штрафует обычный чатовый флуд (`кто знает`, `подскажите`, `как сделать`, `где скачать`).
    - `should_filter_by_stop_words(text, stop_words)`: Проверяет текст на пользовательские стоп-слова.
-   - `generate_draft_reply(user_profile, job_text="", custom_instruction="")`: Генерирует вежливое персонализированное сопроводительное письмо с указанием имени, опыта в правильном русском склонении ("3 года", "5 лет"), стека инструментов и пользовательских дополнений/пожеланий.
+   - `async generate_draft_reply(user_profile, job_text, custom_instruction="")`:
+     - При заданном `OPENROUTER_API_KEY` генерирует отклик через LLM (по умолчанию `google/gemini-2.5-flash-lite`), **учитывая текст вакансии** (`job_text`), профиль (имя, опыт, стек, о себе) и пожелание (`custom_instruction`). До 120 слов, на русском, от первого лица.
+     - При отсутствии ключа или любой ошибке сети/API — graceful fallback на локальный шаблон (имя + опыт в правильном склонении + стек + `custom_instruction`), ошибка логируется как warning.
+     - Модель и провайдер настраиваются через `OPENROUTER_MODEL` / `OPENROUTER_BASE_URL`.
 
 ---
 
@@ -152,7 +160,7 @@
   - `/status` — Проверка статуса подписки и аккаунта.
   - `/help` — Руководство по работе.
   - `/debug` (для администраторов) — Живая статистика работы MTProto парсера.
-- **Оплаты**: Поддержка Telegram Stars и ручных подтверждений администратором.
+- **Оплаты**: Оплата переводом на карту РФ с ручным подтверждением администратором через inline-кнопки (`admin_approve:` / `admin_reject:`). При одобрении подписка продляется через `repo.extend_user_subscription()`. Telegram Stars отключён (мёртвый код удалён).
 
 ---
 
@@ -160,7 +168,7 @@
 
 1. **Тестовая сюита**:
    - Запуск: `$env:PYTHONPATH='backend'; python -m pytest backend/tests`
-   - Все **41 юнит-тест** полностью покрывают авторизацию, профиль, каналы, подписки, админку, парсер, карточки, классификатор интентов и перегенерацию откликов.
+   - Юнит-тесты покрывают: авторизацию (включая регрессионный тест закрытия `dev_mode_*` бэкдора и наличие `exp` в JWT), профиль, портфолио, каналы, карточки вакансий (`/api/cards`), подписки, админку, классификатор интентов и перегенерацию откликов.
 
 2. **Скрипт Деплоя (`scripts/deploy.py`)**:
    - Gate 1: Компиляция фронтенда React TypeScript (`npm run build`).

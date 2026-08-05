@@ -19,7 +19,7 @@ import {
   Zap,
   ShieldCheck as AdminShieldIcon,
 } from 'lucide-react';
-import { api, UserProfile, PortfolioItem, Channel } from './api';
+import { api, UserProfile, PortfolioItem, Channel, Profession, JobCard, JobCardStatus } from './api';
 import { AdminPanel } from './AdminPanel';
 
 interface TelegramUser {
@@ -38,6 +38,11 @@ const DEFAULT_PROFESSIONS = [
   { id: 'smm', title_ru: 'SMM-специалист', icon_emoji: '📱' },
 ];
 
+// Профессии — единый источник правды с бэкенда (GET /api/professions).
+// DEFAULT_PROFESSIONS используется только как fallback до загрузки.
+const getProfessionOptions = (remote: Profession[] | null) =>
+  remote && remote.length > 0 ? remote : DEFAULT_PROFESSIONS;
+
 // Telegram Haptic Feedback helper
 const triggerHaptic = (style: 'light' | 'medium' | 'heavy' | 'rigid' | 'soft' = 'light') => {
   try {
@@ -48,7 +53,7 @@ const triggerHaptic = (style: 'light' | 'medium' | 'heavy' | 'rigid' | 'soft' = 
 };
 
 export function App() {
-  const [activeTab, setActiveTab] = useState<'profile' | 'portfolio' | 'channels' | 'subscription' | 'admin'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'portfolio' | 'jobs' | 'channels' | 'subscription' | 'admin'>('profile');
   const [tgUser, setTgUser] = useState<TelegramUser | null>(null);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
 
@@ -56,6 +61,12 @@ export function App() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [portfolio, setPortfolio] = useState<PortfolioItem[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
+  const [professions, setProfessions] = useState<Profession[] | null>(null);
+  const [cards, setCards] = useState<JobCard[]>([]);
+  const [cardsStatusFilter, setCardsStatusFilter] = useState<JobCardStatus | ''>('');
+  const [loadingCards, setLoadingCards] = useState<boolean>(false);
+  const [regenCardId, setRegenCardId] = useState<number | null>(null);
+  const [copiedCardId, setCopiedCardId] = useState<number | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [savingProfile, setSavingProfile] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -104,9 +115,12 @@ export function App() {
     }, 4000);
   };
 
-  const handleTabChange = (tab: 'profile' | 'portfolio' | 'channels' | 'subscription' | 'admin') => {
+  const handleTabChange = (tab: 'profile' | 'portfolio' | 'jobs' | 'channels' | 'subscription' | 'admin') => {
     triggerHaptic('light');
     setActiveTab(tab);
+    if (tab === 'jobs') {
+      loadCards();
+    }
   };
 
   const handleCopyCard = async () => {
@@ -238,10 +252,11 @@ export function App() {
     setLoading(true);
     setError(null);
     try {
-      const [profileData, portfolioData, channelsData, adminRes] = await Promise.all([
+      const [profileData, portfolioData, channelsData, professionsData, adminRes] = await Promise.all([
         api.getProfile().catch(() => null),
         api.getPortfolio().catch(() => []),
         api.getChannels().catch(() => []),
+        api.getProfessions().catch(() => null),
         api.checkAdmin().catch(() => ({ is_admin: false, user_id: 0 })),
       ]);
 
@@ -254,6 +269,7 @@ export function App() {
 
       setPortfolio(portfolioData || []);
       setChannels(channelsData || []);
+      setProfessions(professionsData || null);
 
       const tg = (window as any).Telegram?.WebApp;
       const tgId = tg?.initDataUnsafe?.user?.id;
@@ -266,6 +282,70 @@ export function App() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // --- Job Cards Handlers ---
+  const loadCards = async (filter: JobCardStatus | '' = cardsStatusFilter) => {
+    setLoadingCards(true);
+    try {
+      const data = await api.getCards(filter || undefined);
+      setCards(data);
+    } catch (err) {
+      console.error('Failed to load cards:', err);
+      setCards([]);
+    } finally {
+      setLoadingCards(false);
+    }
+  };
+
+  const handleCardStatusChange = async (cardId: number, status: JobCardStatus) => {
+    triggerHaptic('light');
+    setCards((prev) => prev.map((c) => (c.id === cardId ? { ...c, status } : c)));
+    try {
+      await api.updateCardStatus(cardId, status);
+      showToast(`Вакансия отмечена как «${statusLabel(status)}»`, 'success');
+    } catch (err) {
+      console.error('Failed to update card status:', err);
+      showToast('Не удалось обновить статус', 'error');
+      loadCards();
+    }
+  };
+
+  const handleRegenerateCard = async (cardId: number, instruction: string) => {
+    triggerHaptic('medium');
+    setRegenCardId(cardId);
+    try {
+      const updated = await api.regenerateCardDraft(cardId, instruction);
+      setCards((prev) => prev.map((c) => (c.id === cardId ? updated : c)));
+      showToast('Отклик перегенерирован', 'success');
+    } catch (err) {
+      console.error('Failed to regenerate card draft:', err);
+      showToast('Ошибка при перегенерации отклика', 'error');
+    } finally {
+      setRegenCardId(null);
+    }
+  };
+
+  const handleCopyDraft = async (card: JobCard) => {
+    triggerHaptic('light');
+    try {
+      await navigator.clipboard.writeText(card.draft_reply);
+      setCopiedCardId(card.id);
+      setTimeout(() => setCopiedCardId(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy draft:', err);
+    }
+  };
+
+  const statusLabel = (status: JobCardStatus): string => {
+    const map: Record<JobCardStatus, string> = {
+      new: 'Новая',
+      saved: 'Сохранена',
+      applied: 'Откликнулся',
+      rejected: 'Пропущена',
+      hidden: 'Скрыта',
+    };
+    return map[status] || status;
   };
 
   // --- Profile Handlers ---
@@ -459,7 +539,7 @@ export function App() {
             {/* Step 1: Professions */}
             {onboardingStep === 1 && (
               <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                {DEFAULT_PROFESSIONS.map((p) => (
+                {getProfessionOptions(professions).map((p) => (
                   <button
                     key={p.id}
                     type="button"
@@ -763,7 +843,7 @@ export function App() {
                       onChange={(e) => handleProfessionChange(e.target.value)}
                       className="w-full bg-slate-50 text-slate-900 p-2.5 rounded-lg border border-slate-200 focus:outline-none focus:border-[#005BB3] focus:bg-white text-sm font-body"
                     >
-                      {DEFAULT_PROFESSIONS.map((p) => (
+                      {getProfessionOptions(professions).map((p) => (
                         <option key={p.id} value={p.id}>
                           {p.icon_emoji} {p.title_ru}
                         </option>
@@ -986,6 +1066,161 @@ export function App() {
                         >
                           <Trash2 size={16} />
                         </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* JOBS TAB */}
+            {activeTab === 'jobs' && (
+              <div className="space-y-4 animate-fadeIn pb-6 font-body">
+                <h2 className="font-heading text-lg font-semibold flex items-center gap-2 text-slate-900">
+                  <Radio size={20} className="text-[#005BB3]" /> Вакансии & Отклики
+                </h2>
+
+                {/* Status filter chips */}
+                <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+                  {[
+                    { id: '', label: 'Все' },
+                    { id: 'new', label: 'Новые' },
+                    { id: 'saved', label: 'Сохранённые' },
+                    { id: 'applied', label: 'Откликнулся' },
+                    { id: 'rejected', label: 'Пропущенные' },
+                  ].map((f) => (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => {
+                        triggerHaptic('light');
+                        setCardsStatusFilter(f.id as JobCardStatus | '');
+                        loadCards(f.id as JobCardStatus | '');
+                      }}
+                      className={`whitespace-nowrap text-xs px-3 py-1.5 rounded-full border transition-all ${
+                        cardsStatusFilter === f.id
+                          ? 'bg-[#005BB3] text-white border-[#005BB3] font-semibold'
+                          : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+
+                {loadingCards ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-slate-400 space-y-2">
+                    <Loader2 className="animate-spin text-[#005BB3]" size={28} />
+                    <p className="text-xs font-medium">Загружаем вакансии...</p>
+                  </div>
+                ) : cards.length === 0 ? (
+                  <div className="glass-card glass-card-hover p-6 rounded-xl text-center space-y-3 shadow-sm">
+                    <div className="w-12 h-12 bg-[#B2DAE4]/30 text-[#005BB3] rounded-full flex items-center justify-center mx-auto border border-[#B2DAE4]">
+                      <Radio size={24} />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-800">Пока нет вакансий</p>
+                      <p className="text-xs text-slate-500 mt-1">
+                        Как только бот найдёт подходящие заказы в каналах, они появятся здесь с готовым откликом.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {cards.map((card) => (
+                      <div key={card.id} className="glass-card p-4 rounded-xl space-y-3 shadow-sm border border-slate-200">
+                        {/* Card header */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-[11px] text-slate-500 truncate">
+                              📢 {card.channel_title || `@${card.channel_username}`}
+                            </p>
+                            <span className={`inline-block text-[10px] font-semibold px-2 py-0.5 rounded-full mt-1 ${
+                              card.status === 'new' ? 'bg-[#005BB3]/10 text-[#005BB3]'
+                                : card.status === 'applied' ? 'bg-emerald-100 text-[#029456]'
+                                : card.status === 'saved' ? 'bg-amber-100 text-[#F86A38]'
+                                : 'bg-slate-100 text-slate-500'
+                            }`}>
+                              {statusLabel(card.status)}
+                            </span>
+                          </div>
+                          {card.post_url && (
+                            <a
+                              href={card.post_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-[#005BB3] hover:underline flex items-center gap-1 shrink-0"
+                            >
+                              <ExternalLink size={12} /> Открыть
+                            </a>
+                          )}
+                        </div>
+
+                        {/* Post text */}
+                        <p className="text-xs text-slate-700 whitespace-pre-wrap line-clamp-4 leading-relaxed">
+                          {card.post_text}
+                        </p>
+
+                        {/* Draft reply */}
+                        {card.draft_reply && (
+                          <div className="bg-slate-50 rounded-lg border border-slate-200 p-3 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Готовый отклик</span>
+                              <button
+                                type="button"
+                                onClick={() => handleCopyDraft(card)}
+                                className="text-[10px] bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 px-2 py-0.5 rounded-md flex items-center gap-1 transition-all"
+                              >
+                                {copiedCardId === card.id ? (
+                                  <><Check size={11} className="text-[#029456]" /><span className="text-[#029456]">Скопировано</span></>
+                                ) : (
+                                  <><Copy size={11} /> Копировать</>
+                                )}
+                              </button>
+                            </div>
+                            <p className="text-xs text-slate-700 whitespace-pre-wrap leading-relaxed">{card.draft_reply}</p>
+                          </div>
+                        )}
+
+                        {/* Actions */}
+                        <div className="flex flex-wrap gap-2 pt-1">
+                          <button
+                            type="button"
+                            disabled={regenCardId === card.id}
+                            onClick={() => handleRegenerateCard(card.id, '')}
+                            className="text-xs bg-[#005BB3]/10 hover:bg-[#005BB3]/20 text-[#005BB3] border border-[#005BB3]/30 px-2.5 py-1.5 rounded-md transition-all flex items-center gap-1 disabled:opacity-50"
+                          >
+                            {regenCardId === card.id ? <Loader2 size={12} className="animate-spin" /> : <Zap size={12} />}
+                            Перегенерировать
+                          </button>
+                          {card.status !== 'applied' && (
+                            <button
+                              type="button"
+                              onClick={() => handleCardStatusChange(card.id, 'applied')}
+                              className="text-xs bg-[#029456]/10 hover:bg-[#029456]/20 text-[#029456] border border-[#029456]/30 px-2.5 py-1.5 rounded-md transition-all flex items-center gap-1"
+                            >
+                              <Check size={12} /> Откликнулся
+                            </button>
+                          )}
+                          {card.status !== 'saved' && (
+                            <button
+                              type="button"
+                              onClick={() => handleCardStatusChange(card.id, 'saved')}
+                              className="text-xs bg-amber-50 hover:bg-amber-100 text-[#F86A38] border border-[#F86A38]/30 px-2.5 py-1.5 rounded-md transition-all"
+                            >
+                              Сохранить
+                            </button>
+                          )}
+                          {card.status !== 'rejected' && (
+                            <button
+                              type="button"
+                              onClick={() => handleCardStatusChange(card.id, 'rejected')}
+                              className="text-xs bg-slate-50 hover:bg-slate-100 text-slate-500 border border-slate-200 px-2.5 py-1.5 rounded-md transition-all"
+                            >
+                              Пропустить
+                            </button>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -1283,6 +1518,15 @@ export function App() {
           >
             <Briefcase size={20} />
             <span>Портфолио</span>
+          </button>
+          <button
+            onClick={() => handleTabChange('jobs')}
+            className={`flex flex-col items-center gap-1 text-xs font-body transition-colors ${
+              activeTab === 'jobs' ? 'text-[#005BB3] font-semibold' : 'text-slate-500 hover:text-[#005BB3]'
+            }`}
+          >
+            <Radio size={20} />
+            <span>Вакансии</span>
           </button>
           <button
             onClick={() => handleTabChange('channels')}
