@@ -1,10 +1,61 @@
 """
 Matching Engine & Filtering Service for Vacancy Spotter SaaS.
-Handles stop-word filtering, keyword match scoring, and draft response generation.
+Handles stop-word filtering, keyword match scoring, vacancy intent classification, and draft response generation.
 """
 
+import re
 from typing import Any
 from models import UserProfileDTO
+
+
+def is_vacancy_post(text: str) -> tuple[bool, float, list[str]]:
+    """
+    Classifies whether a text post has vacancy/hiring intent.
+    Returns (is_vacancy: bool, confidence_score: float, matched_triggers: list[str]).
+    """
+    if not text or not text.strip():
+        return False, 0.0, []
+
+    text_lower = text.lower()
+    matched_triggers: list[str] = []
+
+    vacancy_keywords = [
+        "ищу", "нужен", "нужна", "нужны", "требуется", "требуются", "ищем",
+        "вакансия", "вакансии", "заказ", "заказы", "оплата", "бюджет", "тз",
+        "в команду", "отклик", "отклики", "портфолио", "резюме", "в лс",
+        "руб", "рублей", "р.", "$", "usd", "eur", "€"
+    ]
+
+    non_vacancy_keywords = [
+        "кто знает", "подскажите", "как сделать", "посоветуйте", "оцените",
+        "где скачать", "проблема с", "почему не", "как решить", "помогите с"
+    ]
+
+    for kw in vacancy_keywords:
+        if kw in text_lower:
+            matched_triggers.append(kw)
+
+    contact_matches = re.findall(r'(@[a-zA-Z0-9_]{3,}|t\.me/[a-zA-Z0-9_]+|https?://[^\s]+)', text)
+    for contact in contact_matches:
+        if contact not in matched_triggers:
+            matched_triggers.append(contact)
+
+    matched_negatives = [kw for kw in non_vacancy_keywords if kw in text_lower]
+
+    pos_count = len(matched_triggers)
+    neg_count = len(matched_negatives)
+
+    if pos_count == 0:
+        return False, 0.0, []
+
+    score = min(1.0, pos_count * 0.35)
+    if neg_count > 0:
+        score = max(0.0, score - neg_count * 0.25)
+
+    score = round(score, 2)
+    is_vacancy = score >= 0.3 and pos_count > neg_count
+
+    return is_vacancy, score, matched_triggers
 
 
 def should_filter_by_stop_words(text: str, stop_words: list[str]) -> bool:
@@ -34,10 +85,14 @@ def _format_experience_years(years: int) -> str:
     return f"{years} лет"
 
 
-def generate_draft_reply(user_profile: UserProfileDTO | dict[str, Any], job_text: str = "") -> str:
+def generate_draft_reply(
+    user_profile: UserProfileDTO | dict[str, Any],
+    job_text: str = "",
+    custom_instruction: str = ""
+) -> str:
     """
     Generates a personalized, professional draft reply for a job posting.
-    Accepts either a UserProfileDTO instance or a dict.
+    Accepts either a UserProfileDTO instance or a dict, and optional custom_instruction.
     """
     if isinstance(user_profile, dict):
         first_name = user_profile.get("first_name", "Фрилансер")
@@ -63,6 +118,9 @@ def generate_draft_reply(user_profile: UserProfileDTO | dict[str, Any], job_text
 
     if bio_summary and bio_summary.strip():
         lines.append(bio_summary.strip())
+
+    if custom_instruction and custom_instruction.strip():
+        lines.append(f"📌 Дополнение: {custom_instruction.strip()}")
 
     lines.append("Заинтересовал ваш проект! Буду рад обсудить детали и приступить к выполнению.")
     return "\n\n".join(lines)

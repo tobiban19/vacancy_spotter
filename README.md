@@ -1,5 +1,5 @@
 ---
-title: Vacancy Spotter SaaS Backend
+title: Vacancy Spotter SaaS Backend & Telegram Mini App
 emoji: 🚀
 colorFrom: blue
 colorTo: indigo
@@ -10,9 +10,126 @@ pinned: false
 short_description: Vacancy Spotter SaaS Backend & Telegram Bot 24/7
 ---
 
-# 🚀 Vacancy Spotter SaaS Backend & Telegram Bot
+# 🚀 Vacancy Spotter — SaaS Техническая Документация
 
-Автономный бэкенд и Telegram-бот для сервиса откликов на вакансии **Vacancy Spotter**.
+**Vacancy Spotter** — автономный SaaS-сервис и Telegram-бот (`@vacancy_spott_bot`) с интегрированным Telegram Mini App кабиннетом для мониторинга вакансий, автоматического составления сопроводительных писем и отправки откликов.
 
-- **Telegram Bot**: `@vacancy_spott_bot`
-- **Mini App**: `https://frontend-psi-nine-2ydjpsdrfq.vercel.app`
+---
+
+## 📐 Архитектура Системы
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                 Telegram Client / User                      │
+└──────────────┬──────────────────────────────┬───────────────┘
+               │                              │
+     Telegram WebApp                        Bot Inline
+     (React 18 + Vite)                     Commands & Menu
+               │                              │
+               ▼                              ▼
+┌─────────────────────────────┐  ┌────────────────────────────┐
+│   Vercel / Mini App Host    │  │  aiogram 3 Telegram Bot    │
+└──────────────┬──────────────┘  └────────────┬───────────────┘
+               │                              │
+               │ (REST API / JWT Auth)        │ (Card Actions / Payments)
+               ▼                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    FastAPI Backend (app.py)                 │
+├─────────────────────────────────────────────────────────────┤
+│  • Auth Engine (Telegram initData HMAC SHA256)              │
+│  • Matching Service (Keyword scoring & Stop-words)          │
+│  • Userbot Parser (Telethon MTProto listener)               │
+│  • Database Repository (SQLite / WAL mode via aiosqlite)    │
+└──────────────────────────────┬──────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────┐
+│                  SQLite Data Store (data/)                  │
+│   (Users, Portfolios, Channels, Job Cards, Trace Logs, etc.)│
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🛠️ Технологический Стек
+
+- **Backend**: Python 3.11, FastAPI, Pydantic v2, `aiogram` 3.x, `Telethon` (MTProto), `aiosqlite`, `PyJWT`.
+- **Frontend**: React 18, TypeScript, Vite, TailwindCSS, Lucide Icons, Telegram WebApp SDK.
+- **База Данных**: SQLite (WAL-режим, асинхронные пулы `aiosqlite`).
+- **Деплой**:
+  - Frontend: **Vercel** (`https://frontend-psi-nine-2ydjpsdrfq.vercel.app`).
+  - Backend / Bot: **VPS Linux (systemd)** / Hugging Face Spaces / Render.
+
+---
+
+## 🚀 Быстрый Запуск Проекта
+
+### 1. Требования
+- Python 3.11+
+- Node.js 18+ и `npm`
+
+### 2. Установка backend
+```bash
+# Клонирование и переход в директорию backend
+cd backend
+
+# Создание виртуального окружения
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Установка зависимостей
+pip install -r requirements.txt
+```
+
+### 3. Переменные окружения (`backend/.env`)
+Создайте файл `backend/.env`:
+```env
+BOT_TOKEN=8773545660:AA...
+TELEGRAM_API_ID=31703569
+TELEGRAM_API_HASH=93bf3b90dbed4fcf31c7cb71a065daa5
+JWT_SECRET=super_secret_jwt_key_here
+DATABASE_URL=sqlite+aiosqlite:///../data/saas_spotter.sqlite3
+ADMIN_TELEGRAM_IDS=965000782
+DEMO_DURATION_DAYS=2
+```
+
+### 4. Запуск локального бэкенда и бота
+```bash
+# В корне проекта:
+python app.py
+# Или напрямую через uvicorn:
+python backend/server.py
+```
+
+### 5. Запуск фронтенда (Telegram Mini App)
+```bash
+cd frontend
+npm install
+npm run dev
+```
+Фронтенд будет доступен по адресу `http://localhost:5173`.
+
+---
+
+## 📚 Документация Модулей Проекта
+
+Подробная полная техническая спецификация всех API endpoints, структуры БД и сервисов доступна в файле [`docs/TECHNICAL_DOCS.md`](file:///c:/Users/ptimo/Documents/antigravity/vacancy-spotter-app/docs/TECHNICAL_DOCS.md).
+
+### Ключевые компоненты:
+1. [`app.py`](file:///c:/Users/ptimo/Documents/antigravity/vacancy-spotter-app/app.py): Главный единый точка входа для запуска FastAPI, Telegram-бота, MTProto парсера и интерфейса Gradio.
+2. [`backend/api.py`](file:///c:/Users/ptimo/Documents/antigravity/vacancy-spotter-app/backend/api.py): REST API для Mini App (авторизация через `initData` HMAC, профиль, портфолио, каналы, карточки вакансий, панель администратора).
+3. [`backend/bot_service.py`](file:///c:/Users/ptimo/Documents/antigravity/vacancy-spotter-app/backend/bot_service.py): Логика Telegram-бота (команды `/start`, `/status`, `/help`, `/debug`, генерация откликов, подписки, оплаты).
+4. [`backend/telethon_parser.py`](file:///c:/Users/ptimo/Documents/antigravity/vacancy-spotter-app/backend/telethon_parser.py): MTProto парсер каналов Telegram в реальном времени.
+5. [`backend/database.py`](file:///c:/Users/ptimo/Documents/antigravity/vacancy-spotter-app/backend/database.py): Репозиторий базы данных SQLite на `aiosqlite`.
+6. [`frontend/src/App.tsx`](file:///c:/Users/ptimo/Documents/antigravity/vacancy-spotter-app/frontend/src/App.tsx): Главное клиентское приложение Telegram Mini App.
+7. [`frontend/src/AdminPanel.tsx`](file:///c:/Users/ptimo/Documents/antigravity/vacancy-spotter-app/frontend/src/AdminPanel.tsx): Панель администрирования пользователей, карточек и статистики.
+8. [`scripts/deploy.py`](file:///c:/Users/ptimo/Documents/antigravity/vacancy-spotter-app/scripts/deploy.py): Автоматический скрипт деплоя с pre-flight валидацией (npm build + pytest + git push + vercel deploy + VPS systemd deployment).
+
+---
+
+## 🧪 Тестирование и Валидация
+
+Для запуска автоматических тестов backend:
+```bash
+PYTHONPATH=backend pytest backend/tests
+```

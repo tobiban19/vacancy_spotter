@@ -459,16 +459,21 @@ async def process_rewrite_job_card(query: CallbackQuery) -> None:
         await query.answer("Карточка не найдена", show_alert=True)
         return
 
+    profile = await repo.get_user_profile(user_id)
+    USER_REGEN_WAITING[user_id] = card_id
+
     draft = card.draft_reply
     if not draft or not draft.strip():
-        profile = await repo.get_user_profile(user_id)
         draft = generate_draft_reply(profile, card.post_text)
 
-    await query.answer("Текст отправлен ниже. Нажмите на него для копирования.", show_alert=False)
+    await query.answer()
 
     if query.message and hasattr(query.message, "answer"):
+        escaped_draft = html.escape(draft)
         await query.message.answer(
-            f"📋 <b>Ваш отклик (нажмите на текст, чтобы скопировать):</b>\n\n<code>{draft}</code>",
+            f"📋 <b>Текущий отклик на вакансию #{card_id}:</b>\n\n"
+            f"<code>{escaped_draft}</code>\n\n"
+            f"✏️ <b>Напишите в ответ ваши пожелания к отклику, чтобы ИИ перегенерировал его:</b>",
             parse_mode=ParseMode.HTML,
         )
 
@@ -499,28 +504,35 @@ async def handle_user_text_message(message: Message) -> None:
     user_id = message.from_user.id
     if user_id in USER_REGEN_WAITING:
         card_id = USER_REGEN_WAITING.pop(user_id)
-        user_instruction = message.text.strip()
+        user_instruction = (message.text or "").strip()
 
-        if repo._conn is None:
-            await repo.open()
+        try:
+            if repo._conn is None:
+                await repo.open()
 
-        card = await repo.get_job_card_by_id(card_id, user_id)
-        profile = await repo.get_user_profile(user_id)
+            card = await repo.get_job_card_by_id(card_id, user_id)
+            profile = await repo.get_user_profile(user_id)
 
-        if card and profile:
-            new_draft = generate_draft_reply(profile, card.post_text, custom_instruction=user_instruction)
-            await repo.update_job_card_draft(card_id, user_id, new_draft)
-            card.draft_reply = new_draft
+            if card and profile:
+                new_draft = generate_draft_reply(profile, card.post_text, custom_instruction=user_instruction)
+                await repo.update_job_card_draft(card_id, user_id, new_draft)
+                card.draft_reply = new_draft
 
-            msg = (
-                f"✨ <b>Перегенерированный отклик (Вакансия #{card_id}):</b>\n\n"
-                f"💡 <i>Пожелание: {user_instruction}</i>\n\n"
-                f"<code>{new_draft}</code>"
-            )
-            kb = get_job_card_keyboard(card_id, card.post_url)
-            await message.answer(msg, parse_mode=ParseMode.HTML, reply_markup=kb)
-        else:
-            await message.answer("Не удалось найти вакансию для перегенерации.")
+                escaped_instr = html.escape(user_instruction)
+                escaped_draft = html.escape(new_draft)
+
+                msg = (
+                    f"✨ <b>Перегенерированный отклик (Вакансия #{card_id}):</b>\n\n"
+                    f"💡 <i>Пожелание: {escaped_instr}</i>\n\n"
+                    f"<code>{escaped_draft}</code>"
+                )
+                kb = get_job_card_keyboard(card_id, card.post_url)
+                await message.answer(msg, parse_mode=ParseMode.HTML, reply_markup=kb)
+            else:
+                await message.answer("Не удалось найти вакансию для перегенерации.")
+        except Exception as exc:
+            log.error("Error regenerating job card draft for user %s, card %s: %s", user_id, card_id, exc)
+            await message.answer(f"⚠️ Ошибка при перегенерации отклика: {exc}")
 
 
 @router.callback_query(F.data.startswith("skip:"))

@@ -23,8 +23,10 @@ from models import (
 from matching_service import (
     calculate_match_score,
     generate_draft_reply,
+    is_vacancy_post,
     should_filter_by_stop_words,
 )
+
 
 
 # ---------------------------------------------------------------------------
@@ -94,6 +96,49 @@ def test_generate_draft_reply_with_dict():
     assert "5 лет" in reply
     assert "Cinema4D, Blender" in reply
     assert "Создаю 2D и 3D анимации." in reply
+
+
+def test_is_vacancy_post_positive():
+    text1 = "Ищу видеомонтажера в команду. Оплата 5000 руб, ТЗ в лс @recruiter_bot"
+    is_vac1, score1, triggers1 = is_vacancy_post(text1)
+    assert is_vac1 is True
+    assert score1 > 0.5
+    assert "ищу" in triggers1
+    assert "руб" in triggers1
+    assert "в лс" in triggers1
+
+    text2 = "Срочно требуется разработчик Python. Бюджет 1000$ t.me/work_channel"
+    is_vac2, score2, triggers2 = is_vacancy_post(text2)
+    assert is_vac2 is True
+    assert score2 > 0.5
+    assert "требуется" in triggers2
+
+
+def test_is_vacancy_post_negative():
+    text1 = "Кто знает, как сделать плавный перех в Premiere Pro? Подскажите пожалуйста, где скачать плагин, проблема с фреймрейтом."
+    is_vac1, score1, triggers1 = is_vacancy_post(text1)
+    assert is_vac1 is False
+
+    text2 = ""
+    is_vac2, score2, triggers2 = is_vacancy_post(text2)
+    assert is_vac2 is False
+    assert score2 == 0.0
+    assert triggers2 == []
+
+
+def test_generate_draft_reply_with_custom_instruction():
+    profile = {
+        "first_name": "Иван",
+        "experience_years": 2,
+        "bio_summary": "Делаю качественный монтаж.",
+        "software_stack": ["After Effects"],
+    }
+    reply = generate_draft_reply(profile, custom_instruction="Скидка 10% на первый заказ")
+    assert "📌 Дополнение: Скидка 10% на первый заказ" in reply
+    assert "Иван" in reply
+
+    reply_no_custom = generate_draft_reply(profile)
+    assert "📌 Дополнение:" not in reply_no_custom
 
 
 # ---------------------------------------------------------------------------

@@ -14,6 +14,7 @@ from telethon import TelegramClient, events
 from config import settings
 from database import DatabaseRepository
 from models import JobCardCreateDTO, JobCardStatusEnum
+from matching_service import is_vacancy_post, generate_draft_reply
 import bot_service
 
 log = logging.getLogger("saas_parser")
@@ -122,6 +123,18 @@ async def handle_new_channel_post(event: events.NewMessage.Event):
         detail=f"matched keywords: {', '.join(matched_kws)}",
     )
 
+    is_vac, vac_score, vac_triggers = is_vacancy_post(event.text)
+    if not is_vac:
+        snippet = event.text[:100].replace("\n", " ")
+        log.info("[TRACE:%s] 💬 non_vacancy_chat | @%s | text: %s", trace_id, username, snippet)
+        await _safe_log_trace(
+            trace_id, "non_vacancy_chat",
+            channel=f"@{username}", post_url=post_url,
+            post_snippet=snippet,
+            detail=f"Intent score {vac_score} below threshold",
+        )
+        return
+
     try:
         users = await repo.get_users_subscribed_to_channel(username)
         bot = bot_service.get_bot()
@@ -163,6 +176,8 @@ async def handle_new_channel_post(event: events.NewMessage.Event):
                 )
                 continue
 
+            draft = generate_draft_reply(u, event.text)
+
             card_create = JobCardCreateDTO(
                 user_id=u.user_id,
                 channel_title=title,
@@ -170,7 +185,8 @@ async def handle_new_channel_post(event: events.NewMessage.Event):
                 post_text=event.text,
                 post_url=post_url,
                 status=JobCardStatusEnum.NEW,
-                match_score=1.0,
+                match_score=vac_score,
+                draft_reply=draft,
             )
             card = await repo.create_job_card(card_create)
 
