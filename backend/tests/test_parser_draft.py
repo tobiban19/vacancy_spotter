@@ -114,7 +114,7 @@ async def test_vacancy_post_generates_draft_reply_and_creates_card(test_env):
     assert vac_score >= 0.3
 
     # Generate reference draft reply
-    expected_draft = generate_draft_reply(updated_profile, text)
+    expected_draft = await generate_draft_reply(updated_profile, text)
     assert "Здравствуйте! Меня зовут Мария." in expected_draft
     assert "4 года" in expected_draft
     assert "Premiere Pro, After Effects, CapCut" in expected_draft

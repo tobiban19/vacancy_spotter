@@ -4,6 +4,7 @@ FastAPI REST API Server for Vacancy Spotter SaaS Telegram Mini App.
 
 import os
 import base64
+from datetime import datetime, timedelta, timezone
 from contextlib import asynccontextmanager
 from typing import Annotated, Literal
 import jwt
@@ -33,6 +34,7 @@ from models import (
     ChannelDTO,
     InitDataAuthRequest,
     JobCardCreateDTO,
+    JobCardDTO,
     JobCardStatusEnum,
     PortfolioItemCreateDTO,
     PortfolioItemDTO,
@@ -60,13 +62,27 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+
+def _add_cors_middleware(application: FastAPI) -> None:
+    """Attach CORS middleware once, using a configured origin whitelist.
+
+    Defaults to "*" (permissive) ONLY when CORS_ORIGINS is unset, so local
+    development keeps working. In production, set CORS_ORIGINS to the
+    comma-separated Mini App domains (e.g. the Vercel URL + backend origin).
+    """
+    if any(getattr(m, "cls", None) == CORSMiddleware for m in application.user_middleware):
+        return
+    origins = settings.cors_origins_list
+    application.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins if origins is not None else ["*"],
+        allow_credentials=origins is not None,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+
+_add_cors_middleware(app)
 
 dist_dir = Path(__file__).parent.parent / "frontend" / "dist"
 if dist_dir.exists():
@@ -81,40 +97,45 @@ if dist_dir.exists():
 # ---------------------------------------------------------------------------
 
 def create_jwt_token(user_id: int) -> str:
-    payload = {"sub": str(user_id)}
+    now = datetime.now(timezone.utc)
+    payload = {
+        "sub": str(user_id),
+        "iat": now,
+        "exp": now + timedelta(hours=settings.jwt_expire_hours),
+    }
     return jwt.encode(payload, settings.jwt_secret.get_secret_value(), algorithm="HS256")
 
 
-async def get_current_user_id(authorization: Annotated[str | None, Header()] = None) -> int:
+def _decode_bearer_token(token: str) -> int | None:
+    """Resolve a user id from a JWT or a valid Telegram initData signature.
+
+    Previously this accepted a `dev_mode_<id>` fallback that let anyone become
+    any user (including admins) without a valid signature — that backdoor is
+    removed. Only cryptographically valid JWTs and Telegram initData are honored.
+    """
+    # 1. JWT
+    try:
+        payload = jwt.decode(token, settings.jwt_secret.get_secret_value(), algorithms=["HS256"])
+        return int(payload["sub"])
+    except Exception:
+        pass
+
+    # 2. Telegram initData (validates HMAC-SHA256 against the bot token)
+    tg_user = repo.verify_telegram_init_data(token)
+    if tg_user and isinstance(tg_user, dict) and tg_user.get("id"):
+        return int(tg_user["id"])
+    return None
+
+
+async def _require_user_id(authorization: Annotated[str | None, Header()] = None) -> int:
+    """Shared auth resolver used by both regular and admin dependencies."""
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing or invalid Authorization header",
         )
     token = authorization.split(" ", 1)[1]
-    user_id = None
-    
-    # 1. Try JWT decoding
-    try:
-        payload = jwt.decode(token, settings.jwt_secret.get_secret_value(), algorithms=["HS256"])
-        user_id = int(payload["sub"])
-    except Exception:
-        pass
-
-    # 2. Try Telegram initData verification
-    if not user_id:
-        tg_user = repo.verify_telegram_init_data(token)
-        if tg_user:
-            profile, _ = await repo.get_or_create_user(tg_user)
-            user_id = profile.user_id
-
-    # 3. Dev mode fallback
-    if not user_id and token.startswith("dev_mode_"):
-        parts = token.split("_")
-        dev_id = int(parts[-1]) if parts[-1].isdigit() else 965000782
-        tg_user = {"id": dev_id, "first_name": "Тестовый Фрилансер", "username": "dev_user"}
-        profile, _ = await repo.get_or_create_user(tg_user)
-        user_id = profile.user_id
+    user_id = _decode_bearer_token(token)
 
     if not user_id:
         raise HTTPException(
@@ -131,47 +152,18 @@ async def get_current_user_id(authorization: Annotated[str | None, Header()] = N
     return user_id
 
 
+async def get_current_user_id(authorization: Annotated[str | None, Header()] = None) -> int:
+    return await _require_user_id(authorization)
+
+
 async def get_admin_user_id(authorization: Annotated[str | None, Header()] = None) -> int:
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or invalid Authorization header",
-        )
-    token = authorization.split(" ", 1)[1]
-    user_id = None
-
-    try:
-        payload = jwt.decode(token, settings.jwt_secret.get_secret_value(), algorithms=["HS256"])
-        user_id = int(payload["sub"])
-    except Exception:
-        pass
-
-    if not user_id:
-        tg_user = repo.verify_telegram_init_data(token)
-        if tg_user:
-            profile, _ = await repo.get_or_create_user(tg_user)
-            user_id = profile.user_id
-
-    if not user_id and token.startswith("dev_mode_"):
-        parts = token.split("_")
-        dev_id = int(parts[-1]) if parts[-1].isdigit() else 965000782
-        tg_user = {"id": dev_id, "first_name": "Тестовый Фрилансер", "username": "dev_user"}
-        profile, _ = await repo.get_or_create_user(tg_user)
-        user_id = profile.user_id
-
-    if not user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired authentication token",
-        )
-
+    user_id = await _require_user_id(authorization)
     admin_ids = settings.admin_telegram_ids
     if admin_ids and user_id not in admin_ids:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access denied: Admin privileges required",
         )
-
     return user_id
 
 
@@ -203,16 +195,10 @@ async def auth_tma(req: InitDataAuthRequest):
     """Authenticate via Telegram Mini App initData string."""
     tg_user = repo.verify_telegram_init_data(req.init_data)
     if not tg_user:
-        # Fallback for dev mode if init_data is synthetic "dev_user_12345"
-        if req.init_data.startswith("dev_mode_"):
-            parts = req.init_data.split("_")
-            dev_id = int(parts[-1]) if parts[-1].isdigit() else 965000782
-            tg_user = {"id": dev_id, "first_name": "Тестовый Фрилансер", "username": "dev_user"}
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid Telegram initData signature",
-            )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid Telegram initData signature",
+        )
 
     profile, is_new = await repo.get_or_create_user(tg_user)
     token = create_jwt_token(profile.user_id)
@@ -505,11 +491,22 @@ jobs_router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
 
 @jobs_router.post("/incoming")
-async def process_incoming_job(req: IncomingJobDTO):
+async def process_incoming_job(
+    req: IncomingJobDTO,
+    x_webhook_secret: Annotated[str | None, Header()] = None,
+):
     """
     Ingest endpoint for incoming Telegram channel posts/jobs.
     Matches subscribed users, checks stop-words, creates user_job_cards, and sends Telegram cards.
+
+    Protected: when JOBS_WEBHOOK_SECRET is configured, callers MUST pass the
+    matching `X-Webhook-Secret` header. This prevents anonymous abuse of the
+    endpoint to spam users with arbitrary job cards.
     """
+    expected = settings.jobs_webhook_secret.get_secret_value()
+    if expected and x_webhook_secret != expected:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid webhook secret")
+
     users = await repo.get_users_subscribed_to_channel(req.channel_username)
     created_cards = []
     
@@ -547,6 +544,73 @@ async def process_incoming_job(req: IncomingJobDTO):
         "cards_created": len(created_cards),
         "card_ids": [c.id for c in created_cards],
     }
+
+
+# ---------------------------------------------------------------------------
+# Job Cards Router (vacancies & draft replies in the Mini App)
+# ---------------------------------------------------------------------------
+
+from matching_service import generate_draft_reply
+
+cards_router = APIRouter(prefix="/api/cards", tags=["cards"])
+
+
+class JobCardStatusUpdateDTO(BaseModel):
+    status: JobCardStatusEnum
+
+
+@cards_router.get("", response_model=list[JobCardDTO])
+async def list_user_cards(
+    status_filter: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+    user_id: int = Depends(get_current_user_id),
+):
+    """List the current user's job cards, optionally filtered by status."""
+    return await repo.get_user_job_cards(user_id, status=status_filter, limit=limit, offset=offset)
+
+
+@cards_router.put("/{card_id}/status", response_model=JobCardDTO)
+async def update_card_status(
+    card_id: int,
+    dto: JobCardStatusUpdateDTO,
+    user_id: int = Depends(get_current_user_id),
+):
+    """Update a job card status (new / saved / applied / rejected / hidden)."""
+    updated = await repo.update_job_card_status(card_id, user_id, dto.status)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Job card not found")
+    return updated
+
+
+class JobCardRegenDTO(BaseModel):
+    custom_instruction: str = ""
+
+
+@cards_router.post("/{card_id}/regenerate", response_model=JobCardDTO)
+async def regenerate_card_draft(
+    card_id: int,
+    dto: JobCardRegenDTO,
+    user_id: int = Depends(get_current_user_id),
+):
+    """Regenerate the draft reply for a job card using the user's profile and an
+    optional custom instruction (e.g. "make the tone more formal")."""
+    card = await repo.get_job_card_by_id(card_id, user_id)
+    if not card:
+        raise HTTPException(status_code=404, detail="Job card not found")
+
+    profile = await repo.get_user_profile(user_id)
+    if not profile:
+        raise HTTPException(status_code=404, detail="User profile not found")
+
+    new_draft = await generate_draft_reply(profile, card.post_text, custom_instruction=dto.custom_instruction)
+    updated = await repo.update_job_card_draft(card_id, user_id, new_draft)
+    if not updated:
+        raise HTTPException(status_code=500, detail="Failed to update draft")
+    return updated
+
+
+app.include_router(cards_router)
 
 
 # ---------------------------------------------------------------------------

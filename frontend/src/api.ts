@@ -68,6 +68,23 @@ export interface Profession {
   icon_emoji: string;
 }
 
+export type JobCardStatus = 'new' | 'saved' | 'applied' | 'rejected' | 'hidden';
+
+export interface JobCard {
+  id: number;
+  user_id: number;
+  channel_title: string;
+  channel_username: string;
+  post_text: string;
+  post_url: string;
+  post_date?: string | null;
+  status: JobCardStatus;
+  match_score: number;
+  matched_keywords: string[];
+  draft_reply: string;
+  created_at: string;
+}
+
 export interface AdminUser {
   user_id: number;
   username?: string | null;
@@ -214,6 +231,20 @@ export const api = {
     }
     return response.json();
   },
+
+  // Job Cards (vacancies & draft replies)
+  getCards: (status?: JobCardStatus): Promise<JobCard[]> =>
+    request<JobCard[]>(`/api/cards${status ? `?status_filter=${status}` : ''}`),
+  updateCardStatus: (cardId: number, status: JobCardStatus): Promise<JobCard> =>
+    request<JobCard>(`/api/cards/${cardId}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status }),
+    }),
+  regenerateCardDraft: (cardId: number, customInstruction: string = ''): Promise<JobCard> =>
+    request<JobCard>(`/api/cards/${cardId}/regenerate`, {
+      method: 'POST',
+      body: JSON.stringify({ custom_instruction: customInstruction }),
+    }),
 
   // Admin API
   checkAdmin: (): Promise<{ is_admin: boolean; user_id: number }> =>

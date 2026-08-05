@@ -8,19 +8,11 @@ import uvicorn
 # Add backend directory to sys.path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "backend"))
 
-from api import app, repo
+from api import app, repo, _add_cors_middleware
 from bot_service import start_bot_polling
-from fastapi.middleware.cors import CORSMiddleware
 
-# Ensure CORS allows all origins
-if not any(getattr(m, "cls", None) == CORSMiddleware for m in app.user_middleware):
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+# Ensure CORS middleware is attached (idempotent) using configured origin whitelist.
+_add_cors_middleware(app)
 
 def start_services_in_thread():
     async def run_services():

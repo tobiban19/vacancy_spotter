@@ -43,22 +43,25 @@ from models import (
 )
 
 DEFAULT_PROFESSIONS = [
-    ProfessionDTO(id="video_editor", title_ru="Видеомонтажёр / Рилик", icon_emoji="🎬"),
-    ProfessionDTO(id="motion_designer", title_ru="Моушн-дизайнер / 2D/3D", icon_emoji="🎨"),
-    ProfessionDTO(id="videographer", title_ru="Оператор / Видеограф", icon_emoji="📹"),
-    ProfessionDTO(id="copywriter", title_ru="Копирайтер / Сценарист", icon_emoji="✍️"),
-    ProfessionDTO(id="graphic_designer", title_ru="Графический дизайнер", icon_emoji="🖌️"),
-    ProfessionDTO(id="smm_specialist", title_ru="SMM-специалист / Маркетолог", icon_emoji="📱"),
+    ProfessionDTO(id="video_editor", title_ru="Видеомонтаж / Reelsmaker", icon_emoji="🎬"),
+    ProfessionDTO(id="motion_designer", title_ru="Motion Designer", icon_emoji="🎨"),
+    ProfessionDTO(id="web_designer", title_ru="Веб-дизайнер / UI/UX", icon_emoji="🖥️"),
+    ProfessionDTO(id="copywriter", title_ru="Копирайтер", icon_emoji="✍️"),
+    ProfessionDTO(id="3d_artist", title_ru="3D Artist", icon_emoji="🧊"),
+    ProfessionDTO(id="smm", title_ru="SMM-специалист", icon_emoji="📱"),
 ]
 
 DEFAULT_CHANNELS = [
+    # ------------------------------------------------------------------
     # Video Editing & Reels — dedicated vacancy channels
+    # ------------------------------------------------------------------
     {"profession_id": "video_editor", "username": "editors_video", "title": "Монтажеры/Рилс-мейкеры | заказы и вакансии"},
     {"profession_id": "video_editor", "username": "vakansii_reelsmaker", "title": "Вакансии Рилс-мейкерам"},
     {"profession_id": "video_editor", "username": "prodjob", "title": "Работа видеопродакшн 🎬"},
     {"profession_id": "video_editor", "username": "zababos", "title": "ВИДОСЫ ЗА БАБОСЫ"},
+    {"profession_id": "video_editor", "username": "reelsmaker_tinder", "title": "Вакансии РИЛСМЕЙКЕРЫ | ИИ-спецы | Монтажеры"},
 
-    # General Freelance — multi-profession channels
+    # General Freelance / Media — multi-profession channels (also useful for video editors)
     {"profession_id": "video_editor", "username": "jetlagchat", "title": "Jetlag Chat"},
     {"profession_id": "video_editor", "username": "forallmedia", "title": "Job for Media & Content"},
     {"profession_id": "video_editor", "username": "dddwork", "title": "Работа в медиа"},
@@ -70,8 +73,49 @@ DEFAULT_CHANNELS = [
     {"profession_id": "video_editor", "username": "rueventjob", "title": "Удалённая творческая работа"},
     {"profession_id": "video_editor", "username": "huggabletalents", "title": "A-Teams | Карьера"},
 
-    # Design
-    {"profession_id": "graphic_designer", "username": "pjdaytezakazi", "title": "Горе от дизайна"},
+    # ------------------------------------------------------------------
+    # Motion Designer / 2D-3D animation
+    # ------------------------------------------------------------------
+    {"profession_id": "motion_designer", "username": "motionhunter", "title": "Motion designer hunter"},
+    {"profession_id": "motion_designer", "username": "cgfreelance", "title": "CG Freelance"},
+    {"profession_id": "motion_designer", "username": "workindesign", "title": "Work for Designers"},
+    {"profession_id": "motion_designer", "username": "rueventjob", "title": "Удалённая творческая работа"},
+    {"profession_id": "motion_designer", "username": "FreelanceBay", "title": "Бухта Фриланса"},
+
+    # ------------------------------------------------------------------
+    # Web Designer / UI-UX
+    # ------------------------------------------------------------------
+    {"profession_id": "web_designer", "username": "uiux_job", "title": "UI/UX Jobs"},
+    {"profession_id": "web_designer", "username": "zakaz_design", "title": "Заказы на дизайн / Вакансии"},
+    {"profession_id": "web_designer", "username": "designhunters", "title": "Design Hunters"},
+    {"profession_id": "web_designer", "username": "fordesigner", "title": "Job for Designers"},
+    {"profession_id": "web_designer", "username": "rueventjob", "title": "Удалённая творческая работа"},
+
+    # ------------------------------------------------------------------
+    # Copywriter / Screenwriter / Texts
+    # ------------------------------------------------------------------
+    {"profession_id": "copywriter", "username": "work_editor", "title": "Работа с текстами — вакансии и заказы"},
+    {"profession_id": "copywriter", "username": "textodromo", "title": "Текстодром"},
+    {"profession_id": "copywriter", "username": "copywriter_vacancies", "title": "Вакансии для копирайтеров"},
+    {"profession_id": "copywriter", "username": "Work4writers", "title": "Вакансии для пишущих людей"},
+    {"profession_id": "copywriter", "username": "self_ma", "title": "Копирайтер, редактор — удалённая работа"},
+
+    # ------------------------------------------------------------------
+    # 3D Artist / 3D modeling
+    # ------------------------------------------------------------------
+    {"profession_id": "3d_artist", "username": "cgfreelance", "title": "CG Freelance"},
+    {"profession_id": "3d_artist", "username": "artisthh", "title": "Вакансии 2D/3D Художники"},
+    {"profession_id": "3d_artist", "username": "motionhunter", "title": "Motion designer hunter"},
+    {"profession_id": "3d_artist", "username": "rueventjob", "title": "Удалённая творческая работа"},
+
+    # ------------------------------------------------------------------
+    # SMM / Marketing
+    # ------------------------------------------------------------------
+    {"profession_id": "smm", "username": "vacancysmm", "title": "SMM работа, вакансии, фриланс"},
+    {"profession_id": "smm", "username": "smmlancer", "title": "SMMLANCER — работа в соц.сетях"},
+    {"profession_id": "smm", "username": "digital_jobster", "title": "Digital Jobster"},
+    {"profession_id": "smm", "username": "dnative_job", "title": "Вакансии SMM и Digital"},
+    {"profession_id": "smm", "username": "rueventjob", "title": "Удалённая творческая работа"},
 ]
 
 
@@ -234,6 +278,8 @@ class DatabaseRepository:
             'motion_jobs', 'cg_freelance', 'copywriter_jobs',
             'text_orders', 'smm_vacancies',
         )
+        # Legacy profession id removed from the catalog — drop its channels too.
+        _DEPRECATED_PROFESSIONS = ('graphic_designer', 'videographer', 'smm_specialist')
         placeholders = ",".join("?" for _ in _FAKE_CHANNELS)
         # Delete user_channels links to fake channels first (FK constraint)
         await self._conn.execute(
@@ -243,6 +289,16 @@ class DatabaseRepository:
         await self._conn.execute(
             f"DELETE FROM channels WHERE LOWER(username) IN ({placeholders})",
             tuple(c.lower() for c in _FAKE_CHANNELS),
+        )
+        # Remove channels bound to profession ids that no longer exist in the catalog.
+        dep_placeholders = ",".join("?" for _ in _DEPRECATED_PROFESSIONS)
+        await self._conn.execute(
+            f"DELETE FROM user_channels WHERE channel_id IN (SELECT id FROM channels WHERE profession_id IN ({dep_placeholders}))",
+            _DEPRECATED_PROFESSIONS,
+        )
+        await self._conn.execute(
+            f"DELETE FROM channels WHERE profession_id IN ({dep_placeholders})",
+            _DEPRECATED_PROFESSIONS,
         )
 
         # Seed real channels

@@ -6,20 +6,12 @@ import asyncio
 import logging
 import os
 import uvicorn
-from fastapi.middleware.cors import CORSMiddleware
 
-from api import app, repo
+from api import app, repo, _add_cors_middleware
 from bot_service import start_bot_polling
 
-# Ensure CORSMiddleware allows all origins for Telegram Mini App (e.g. Vercel domain)
-if not any(getattr(m, "cls", None) == CORSMiddleware for m in app.user_middleware):
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+# Ensure CORS middleware is attached (idempotent) using configured origin whitelist.
+_add_cors_middleware(app)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 log = logging.getLogger("saas_main")

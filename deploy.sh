@@ -17,11 +17,12 @@ if ! command -v pm2 &> /dev/null; then
 fi
 
 # 2. Setup project directory
-mkdir -p /opt/vacancy-spotter
-cd /opt/vacancy-spotter
+REMOTE_DIR="/opt/vacancy-spotter-app"
+mkdir -p "$REMOTE_DIR"
+cd "$REMOTE_DIR"
 
-if [ ! -d "/opt/vacancy-spotter/.git" ]; then
-    git clone https://github.com/tobiban19/vacancy_spotter.git .
+if [ ! -d "$REMOTE_DIR/.git" ]; then
+    git clone https://github.com/tobiban19/vacancy-spotter-app.git .
 else
     git pull origin main
 fi
@@ -31,13 +32,13 @@ python3 -m venv venv
 source venv/bin/activate
 
 # 4. Install backend dependencies
-cd /opt/vacancy-spotter/backend
 pip install --upgrade pip
 pip install -r requirements.txt
 
-# 5. Start app via PM2
+# 5. Start app via PM2 (entrypoint is the repo-root app.py which runs
+#    FastAPI + aiogram bot + Telethon parser together)
 pm2 stop vacancy-spotter-backend || true
-pm2 start "python3 server.py" --name vacancy-spotter-backend
+pm2 start "venv/bin/python app.py" --name vacancy-spotter-backend
 pm2 save
 pm2 startup || true
 

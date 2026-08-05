@@ -21,10 +21,22 @@ log = logging.getLogger("saas_parser")
 repo = DatabaseRepository(settings.database_url)
 
 KEYWORDS = (
+    # Video editing / reels
     "монтаж", "монтажёр", "монтажер", "видеомонтаж", "видеограф", "видеоредактор",
     "reels", "рилс", "рилсы", "premiere", "davinci", "after effects",
     "color grading", "цветокоррекция", "цветокор", "постпродакшн", "постпродакшен",
-    "motion design", "моушн", "3d", "cg", "копирайтер", "дизайнер", "smm",
+    # Motion / 3D / CG
+    "motion design", "моушн", "3d", "cg", "анимация", "моделирование", "рендер",
+    "blender", "cinema 4d", "cinema4d", "c4d", "octane",
+    # Design / web
+    "дизайнер", "дизайн", "ui", "ux", "figma", "прототип", "web design", "веб-дизайн",
+    "графический дизайн", "айдентика", "логотип", "branding",
+    # Copywriting / text
+    "копирайтер", "копирайт", "рерайт", "тексты", "сценарист", "сценарий",
+    "редактор", "статья", "контент-мейкер", "пишущий",
+    # SMM / marketing
+    "smm", "маркетолог", "таргетолог", "соцсети", "соц-сети", "контент-план",
+    "reels-мейкер", "рилсмейкер", "рилс-мейкер",
 )
 
 SESSION_PATH = Path(__file__).parent.parent / "data" / "userbot_session.session"
@@ -176,7 +188,7 @@ async def handle_new_channel_post(event: events.NewMessage.Event):
                 )
                 continue
 
-            draft = generate_draft_reply(u, event.text)
+            draft = await generate_draft_reply(u, event.text)
 
             card_create = JobCardCreateDTO(
                 user_id=u.user_id,

@@ -13,8 +13,6 @@ from aiogram.types import (
     InlineKeyboardMarkup,
     Message,
     WebAppInfo,
-    PreCheckoutQuery,
-    LabeledPrice,
 )
 
 from config import settings
@@ -464,7 +462,7 @@ async def process_rewrite_job_card(query: CallbackQuery) -> None:
 
     draft = card.draft_reply
     if not draft or not draft.strip():
-        draft = generate_draft_reply(profile, card.post_text)
+        draft = await generate_draft_reply(profile, card.post_text)
 
     await query.answer()
 
@@ -514,7 +512,7 @@ async def handle_user_text_message(message: Message) -> None:
             profile = await repo.get_user_profile(user_id)
 
             if card and profile:
-                new_draft = generate_draft_reply(profile, card.post_text, custom_instruction=user_instruction)
+                new_draft = await generate_draft_reply(profile, card.post_text, custom_instruction=user_instruction)
                 await repo.update_job_card_draft(card_id, user_id, new_draft)
                 card.draft_reply = new_draft
 
@@ -637,61 +635,6 @@ async def handle_admin_reject_subscription(query: CallbackQuery) -> None:
         await bot.send_message(chat_id=target_user_id, text=reject_text, parse_mode=ParseMode.HTML)
     except Exception as exc:
         log.error("Error sending rejection message to user %s: %s", target_user_id, exc)
-
-
-@router.pre_checkout_query()
-async def process_pre_checkout_query(pre_checkout_query: PreCheckoutQuery) -> None:
-    """Handle Telegram Stars pre-checkout validation."""
-    await pre_checkout_query.answer(ok=True)
-
-
-@router.message(F.successful_payment)
-async def process_successful_payment(message: Message) -> None:
-    """Handle successful Telegram Stars payment."""
-    if not message.from_user or not message.successful_payment:
-        return
-
-    payload = message.successful_payment.invoice_payload
-    user_id = message.from_user.id
-
-    days = 30 if ("month" in payload or "30" in payload) else 7
-
-    if repo._conn is None:
-        await repo.open()
-
-    sub_status = await repo.extend_user_subscription(user_id, days)
-
-    congratulations_text = (
-        f"🎉 <b>Спасибо за оплату Telegram Stars!</b>\n\n"
-        f"➕ Подписка продлена на <b>{days} дней</b>.\n"
-        f"📅 Активна до: <b>{sub_status.subscription_until.strftime('%d.%m.%Y %H:%M') if sub_status.subscription_until else 'N/A'} UTC</b>\n\n"
-        f"🚀 Наслаждайтесь авто-поиском заказов!"
-    )
-    await message.answer(congratulations_text, parse_mode=ParseMode.HTML)
-
-
-async def send_stars_invoice(bot: Bot, chat_id: int, plan: str = "week") -> Message | None:
-    """Send Telegram Stars payment invoice to user."""
-    days = 7 if plan == "week" else 30
-    stars_amount = 150 if plan == "week" else 300
-    title = f"Подписка Vacancy Spotter ({days} дней)"
-    description = f"Доступ к авто-поиску вакансий на {days} дней"
-    payload = f"stars_sub_{plan}_{days}d"
-    currency = "XTR"
-    prices = [LabeledPrice(label=f"Подписка {days} дней", amount=stars_amount)]
-
-    try:
-        return await bot.send_invoice(
-            chat_id=chat_id,
-            title=title,
-            description=description,
-            payload=payload,
-            currency=currency,
-            prices=prices,
-        )
-    except Exception as exc:
-        log.error("Failed to send stars invoice: %s", exc)
-        return None
 
 
 async def start_bot_polling() -> tuple[Bot, Dispatcher]:

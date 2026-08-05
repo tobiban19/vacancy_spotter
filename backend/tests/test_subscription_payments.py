@@ -165,30 +165,6 @@ async def test_admin_approve_callback_query(async_client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_telegram_stars_handlers(async_client: AsyncClient):
-    user_id = 9004
-    await api.repo.get_or_create_user({"id": user_id, "first_name": "StarsUser"})
-
-    # 1. PreCheckoutQuery
-    mock_pre_checkout = AsyncMock()
-    await bot_service.process_pre_checkout_query(mock_pre_checkout)
-    mock_pre_checkout.answer.assert_called_with(ok=True)
-
-    # 2. SuccessfulPayment
-    mock_msg = AsyncMock()
-    mock_msg.from_user.id = user_id
-    mock_msg.successful_payment.invoice_payload = "stars_sub_month_30d"
-
-    await bot_service.process_successful_payment(mock_msg)
-
-    sub = await api.repo.get_subscription_status(user_id)
-    assert sub.status == "active"
-    assert sub.is_valid is True
-    mock_msg.answer.assert_called_once()
-    assert "Спасибо за оплату Telegram Stars!" in mock_msg.answer.call_args.args[0]
-
-
-@pytest.mark.asyncio
 async def test_menu_subscription_and_help_callbacks(async_client: AsyncClient):
     user_id = 9005
     await api.repo.get_or_create_user({"id": user_id, "first_name": "MenuTestUser"})

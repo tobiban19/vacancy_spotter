@@ -67,7 +67,8 @@ def test_calculate_match_score():
     assert "Davinci" not in matched
 
 
-def test_generate_draft_reply_with_dto():
+@pytest.mark.asyncio
+async def test_generate_draft_reply_with_dto():
     now = datetime.now(timezone.utc)
     profile = UserProfileDTO(
         user_id=1001,
@@ -77,21 +78,22 @@ def test_generate_draft_reply_with_dto():
         software_stack=["Premiere Pro", "After Effects"],
         demo_until=now,
     )
-    reply = generate_draft_reply(profile)
+    reply = await generate_draft_reply(profile)
     assert "Алексей" in reply
     assert "3 года" in reply
     assert "Premiere Pro, After Effects" in reply
     assert "Специализируюсь на коротких динамичных Reels." in reply
 
 
-def test_generate_draft_reply_with_dict():
+@pytest.mark.asyncio
+async def test_generate_draft_reply_with_dict():
     profile_dict = {
         "first_name": "Елена",
         "experience_years": 5,
         "bio_summary": "Создаю 2D и 3D анимации.",
         "software_stack": ["Cinema4D", "Blender"],
     }
-    reply = generate_draft_reply(profile_dict)
+    reply = await generate_draft_reply(profile_dict)
     assert "Елена" in reply
     assert "5 лет" in reply
     assert "Cinema4D, Blender" in reply
@@ -126,18 +128,19 @@ def test_is_vacancy_post_negative():
     assert triggers2 == []
 
 
-def test_generate_draft_reply_with_custom_instruction():
+@pytest.mark.asyncio
+async def test_generate_draft_reply_with_custom_instruction():
     profile = {
         "first_name": "Иван",
         "experience_years": 2,
         "bio_summary": "Делаю качественный монтаж.",
         "software_stack": ["After Effects"],
     }
-    reply = generate_draft_reply(profile, custom_instruction="Скидка 10% на первый заказ")
+    reply = await generate_draft_reply(profile, custom_instruction="Скидка 10% на первый заказ")
     assert "📌 Дополнение: Скидка 10% на первый заказ" in reply
     assert "Иван" in reply
 
-    reply_no_custom = generate_draft_reply(profile)
+    reply_no_custom = await generate_draft_reply(profile)
     assert "📌 Дополнение:" not in reply_no_custom
 
 

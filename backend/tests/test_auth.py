@@ -83,3 +83,35 @@ def test_auth_verify_endpoint_invalid():
     assert response.status_code == 400
     data = response.json()
     assert "detail" in data
+
+
+def test_dev_mode_backdoor_is_closed():
+    """Regression test: the legacy `dev_mode_<id>` Bearer fallback must NOT
+    authenticate. Previously anyone could become any user (incl. admins) by
+    sending `Authorization: Bearer dev_mode_965000782`."""
+    client = TestClient(app)
+
+    # Regular user endpoint rejects the dev_mode token
+    resp = client.get("/api/profile", headers={"Authorization": "Bearer dev_mode_965000782"})
+    assert resp.status_code == 401
+
+    # The /api/auth/tma endpoint also rejects synthetic dev_mode init_data
+    resp_tma = client.post("/api/auth/tma", json={"init_data": "dev_mode_965000782"})
+    assert resp_tma.status_code == 400
+
+
+def test_jwt_token_has_expiry():
+    """JWT tokens must carry an `exp` claim (no perpetual tokens)."""
+    from api import create_jwt_token
+    import jwt as _jwt
+    from config import settings
+
+    token = create_jwt_token(965000782)
+    payload = _jwt.decode(
+        token,
+        settings.jwt_secret.get_secret_value(),
+        algorithms=["HS256"],
+    )
+    assert "exp" in payload
+    assert "iat" in payload
+    assert int(payload["sub"]) == 965000782
