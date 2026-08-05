@@ -12,7 +12,7 @@ short_description: Vacancy Spotter SaaS Backend & Telegram Bot 24/7
 
 # 🚀 Vacancy Spotter — SaaS Техническая Документация
 
-**Vacancy Spotter** — автономный SaaS-сервис и Telegram-бот (`@vacancy_spott_bot`) с интегрированным Telegram Mini App кабиннетом для мониторинга вакансий, автоматического составления сопроводительных писем и отправки откликов.
+**Vacancy Spotter** — автономный SaaS-сервис и Telegram-бот (`@vacancy_spott_bot`) с интегрированным Telegram Mini App кабинетом для автоматического отслеживания вакансий, фильтрации интентов найма, генерации персонализированных откликов с помощью ИИ и взаимодействия с клиентами.
 
 ---
 
@@ -37,7 +37,7 @@ short_description: Vacancy Spotter SaaS Backend & Telegram Bot 24/7
 │                    FastAPI Backend (app.py)                 │
 ├─────────────────────────────────────────────────────────────┤
 │  • Auth Engine (Telegram initData HMAC SHA256)              │
-│  • Matching Service (Keyword scoring & Stop-words)          │
+│  • Vacancy Intent Classifier & Matching Engine              │
 │  • Userbot Parser (Telethon MTProto listener)               │
 │  • Database Repository (SQLite / WAL mode via aiosqlite)    │
 └──────────────────────────────┬──────────────────────────────┘
@@ -64,11 +64,7 @@ short_description: Vacancy Spotter SaaS Backend & Telegram Bot 24/7
 
 ## 🚀 Быстрый Запуск Проекта
 
-### 1. Требования
-- Python 3.11+
-- Node.js 18+ и `npm`
-
-### 2. Установка backend
+### 1. Установка backend
 ```bash
 # Клонирование и переход в директорию backend
 cd backend
@@ -81,8 +77,7 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 3. Переменные окружения (`backend/.env`)
-Создайте файл `backend/.env`:
+### 2. Переменные окружения (`backend/.env`)
 ```env
 BOT_TOKEN=8773545660:AA...
 TELEGRAM_API_ID=31703569
@@ -93,21 +88,19 @@ ADMIN_TELEGRAM_IDS=965000782
 DEMO_DURATION_DAYS=2
 ```
 
-### 4. Запуск локального бэкенда и бота
+### 3. Запуск локального бэкенда и бота
 ```bash
-# В корне проекта:
 python app.py
-# Или напрямую через uvicorn:
+# или напрямую через uvicorn:
 python backend/server.py
 ```
 
-### 5. Запуск фронтенда (Telegram Mini App)
+### 4. Запуск фронтенда (Telegram Mini App)
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
-Фронтенд будет доступен по адресу `http://localhost:5173`.
 
 ---
 
@@ -118,18 +111,18 @@ npm run dev
 ### Ключевые компоненты:
 1. [`app.py`](file:///c:/Users/ptimo/Documents/antigravity/vacancy-spotter-app/app.py): Главный единый точка входа для запуска FastAPI, Telegram-бота, MTProto парсера и интерфейса Gradio.
 2. [`backend/api.py`](file:///c:/Users/ptimo/Documents/antigravity/vacancy-spotter-app/backend/api.py): REST API для Mini App (авторизация через `initData` HMAC, профиль, портфолио, каналы, карточки вакансий, панель администратора).
-3. [`backend/bot_service.py`](file:///c:/Users/ptimo/Documents/antigravity/vacancy-spotter-app/backend/bot_service.py): Логика Telegram-бота (команды `/start`, `/status`, `/help`, `/debug`, генерация откликов, подписки, оплаты).
-4. [`backend/telethon_parser.py`](file:///c:/Users/ptimo/Documents/antigravity/vacancy-spotter-app/backend/telethon_parser.py): MTProto парсер каналов Telegram в реальном времени.
-5. [`backend/database.py`](file:///c:/Users/ptimo/Documents/antigravity/vacancy-spotter-app/backend/database.py): Репозиторий базы данных SQLite на `aiosqlite`.
-6. [`frontend/src/App.tsx`](file:///c:/Users/ptimo/Documents/antigravity/vacancy-spotter-app/frontend/src/App.tsx): Главное клиентское приложение Telegram Mini App.
-7. [`frontend/src/AdminPanel.tsx`](file:///c:/Users/ptimo/Documents/antigravity/vacancy-spotter-app/frontend/src/AdminPanel.tsx): Панель администрирования пользователей, карточек и статистики.
-8. [`scripts/deploy.py`](file:///c:/Users/ptimo/Documents/antigravity/vacancy-spotter-app/scripts/deploy.py): Автоматический скрипт деплоя с pre-flight валидацией (npm build + pytest + git push + vercel deploy + VPS systemd deployment).
+3. [`backend/bot_service.py`](file:///c:/Users/ptimo/Documents/antigravity/vacancy-spotter-app/backend/bot_service.py): Логика Telegram-бота (команды `/start`, `/status`, `/help`, `/debug`, генерация откликов, подписки, перегенерация через `USER_REGEN_WAITING`).
+4. [`backend/matching_service.py`](file:///c:/Users/ptimo/Documents/antigravity/vacancy-spotter-app/backend/matching_service.py): Классификатор интента коммерческих вакансий (`is_vacancy_post`) и генератор ИИ-откликов (`generate_draft_reply`).
+5. [`backend/telethon_parser.py`](file:///c:/Users/ptimo/Documents/antigravity/vacancy-spotter-app/backend/telethon_parser.py): MTProto парсер каналов Telegram в реальном времени с фильтрацией интентов и автосозданием откликов.
+6. [`backend/database.py`](file:///c:/Users/ptimo/Documents/antigravity/vacancy-spotter-app/backend/database.py): Репозиторий базы данных SQLite на `aiosqlite`.
+7. [`frontend/src/App.tsx`](file:///c:/Users/ptimo/Documents/antigravity/vacancy-spotter-app/frontend/src/App.tsx): Главное клиентское приложение Telegram Mini App.
+8. [`scripts/deploy.py`](file:///c:/Users/ptimo/Documents/antigravity/vacancy-spotter-app/scripts/deploy.py): Автоматический скрипт деплоя с pre-flight валидацией (npm build + 41 pytest + git push + vercel deploy + VPS systemd deployment).
 
 ---
 
 ## 🧪 Тестирование и Валидация
 
-Для запуска автоматических тестов backend:
+Для запуска пакета их 41 юнит-теста:
 ```bash
-PYTHONPATH=backend pytest backend/tests
+$env:PYTHONPATH='backend'; python -m pytest backend/tests
 ```
