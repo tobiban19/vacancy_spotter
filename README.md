@@ -87,6 +87,9 @@ DATABASE_URL=sqlite+aiosqlite:///../data/saas_spotter.sqlite3
 ADMIN_CHAT_ID=<ваш Telegram ID>
 ADMIN_TELEGRAM_IDS=<список ID админов через запятую>
 DEMO_DURATION_DAYS=2
+# ИИ-генерация откликов (без этого ключа используется локальный шаблон):
+OPENROUTER_API_KEY=<ключ с https://openrouter.ai>
+OPENROUTER_MODEL=google/gemini-2.5-flash-lite
 # Опционально (production):
 CORS_ORIGINS=https://ваш-miniapp.vercel.app,https://ваш-домен
 JOBS_WEBHOOK_SECRET=<случайная строка для защиты /api/jobs/incoming>

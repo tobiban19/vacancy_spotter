@@ -113,12 +113,13 @@ async def test_vacancy_post_generates_draft_reply_and_creates_card(test_env):
     assert is_vac
     assert vac_score >= 0.3
 
-    # Generate reference draft reply
-    expected_draft = await generate_draft_reply(updated_profile, text)
-    assert "Здравствуйте! Меня зовут Мария." in expected_draft
-    assert "4 года" in expected_draft
-    assert "Premiere Pro, After Effects, CapCut" in expected_draft
-    assert "Специализируюсь на динамичном монтаже Reels" in expected_draft
+    # Deterministic draft: mock the LLM-backed generate_draft_reply (imported
+    # by name into telethon_parser) so the parser pipeline is reproducible
+    # and does not depend on network / API key availability.
+    expected_draft = "Здравствуйте! Меня зовут Мария. Опыт — 4 года. Стек: Premiere Pro, After Effects, CapCut."
+
+    async def fake_generate_draft_reply(profile, job_text, custom_instruction=""):
+        return expected_draft
 
     mock_chat = MagicMock()
     mock_chat.username = "editors_video"
@@ -130,7 +131,8 @@ async def test_vacancy_post_generates_draft_reply_and_creates_card(test_env):
     mock_event.get_chat = AsyncMock(return_value=mock_chat)
 
     with patch("bot_service.send_job_card_to_user", new_callable=AsyncMock) as mock_send, \
-         patch("bot_service.get_bot") as mock_get_bot:
+         patch("bot_service.get_bot") as mock_get_bot, \
+         patch("telethon_parser.generate_draft_reply", side_effect=fake_generate_draft_reply):
         mock_bot = AsyncMock()
         mock_bot.get_me = AsyncMock(return_value=MagicMock(username="vacancy_spott_bot"))
         mock_get_bot.return_value = mock_bot

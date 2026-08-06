@@ -21,6 +21,7 @@ from models import (
     UserProfileDTO,
 )
 from matching_service import (
+    _generate_template_reply,
     calculate_match_score,
     generate_draft_reply,
     is_vacancy_post,
@@ -67,8 +68,8 @@ def test_calculate_match_score():
     assert "Davinci" not in matched
 
 
-@pytest.mark.asyncio
-async def test_generate_draft_reply_with_dto():
+def test_template_reply_with_dto():
+    """Template reply works with a UserProfileDTO and covers all fields."""
     now = datetime.now(timezone.utc)
     profile = UserProfileDTO(
         user_id=1001,
@@ -78,26 +79,80 @@ async def test_generate_draft_reply_with_dto():
         software_stack=["Premiere Pro", "After Effects"],
         demo_until=now,
     )
-    reply = await generate_draft_reply(profile)
+    reply = _generate_template_reply(profile)
     assert "Алексей" in reply
     assert "3 года" in reply
     assert "Premiere Pro, After Effects" in reply
     assert "Специализируюсь на коротких динамичных Reels." in reply
 
 
-@pytest.mark.asyncio
-async def test_generate_draft_reply_with_dict():
+def test_template_reply_with_dict():
+    """Template fallback is deterministic and covers profile fields."""
     profile_dict = {
         "first_name": "Елена",
         "experience_years": 5,
         "bio_summary": "Создаю 2D и 3D анимации.",
         "software_stack": ["Cinema4D", "Blender"],
     }
-    reply = await generate_draft_reply(profile_dict)
+    reply = _generate_template_reply(profile_dict)
     assert "Елена" in reply
     assert "5 лет" in reply
     assert "Cinema4D, Blender" in reply
     assert "Создаю 2D и 3D анимации." in reply
+
+
+@pytest.mark.asyncio
+async def test_generate_draft_reply_uses_ai_when_key_set(monkeypatch):
+    """When an API key is configured, generate_draft_reply must call the LLM
+    path and incorporate the vacancy text into the prompt."""
+    from matching_service import _generate_draft_reply_ai
+
+    captured = {}
+
+    async def fake_ai(profile, job_text, custom_instruction=""):
+        captured["job_text"] = job_text
+        captured["custom_instruction"] = custom_instruction
+        return "ИИ-сгенерированный отклик по вакансии."
+
+    # Force a non-empty key so the AI branch is taken.
+    from config import settings
+    monkeypatch.setattr(settings.openrouter_api_key, "get_secret_value", lambda: "fake-key")
+    monkeypatch.setattr("matching_service._generate_draft_reply_ai", fake_ai)
+
+    profile = {"first_name": "Иван", "experience_years": 2, "bio_summary": "", "software_stack": []}
+    reply = await generate_draft_reply(profile, job_text="Нужен монтажёр, оплата 5000р")
+    assert reply == "ИИ-сгенерированный отклик по вакансии."
+    assert "Нужен монтажёр" in captured["job_text"]
+
+
+@pytest.mark.asyncio
+async def test_generate_draft_reply_falls_back_on_error(monkeypatch):
+    """If the LLM call raises, we gracefully fall back to the template."""
+    from config import settings
+
+    async def failing_ai(profile, job_text, custom_instruction=""):
+        raise RuntimeError("simulated network failure")
+
+    monkeypatch.setattr(settings.openrouter_api_key, "get_secret_value", lambda: "fake-key")
+    monkeypatch.setattr("matching_service._generate_draft_reply_ai", failing_ai)
+
+    profile = {"first_name": "Иван", "experience_years": 2, "bio_summary": "Монтаж", "software_stack": ["AE"]}
+    reply = await generate_draft_reply(profile, job_text="Вакансия")
+    # Template markers confirm the fallback path was used.
+    assert "Иван" in reply
+    assert "Здравствуйте!" in reply
+
+
+@pytest.mark.asyncio
+async def test_generate_draft_reply_without_key_uses_template(monkeypatch):
+    """Without an API key, the template path is used (no network)."""
+    from config import settings
+    monkeypatch.setattr(settings.openrouter_api_key, "get_secret_value", lambda: "")
+
+    profile = {"first_name": "Олег", "experience_years": 1, "bio_summary": "", "software_stack": []}
+    reply = await generate_draft_reply(profile, job_text="Вакансия")
+    assert "Олег" in reply
+    assert "1 год" in reply
 
 
 def test_is_vacancy_post_positive():
@@ -128,19 +183,19 @@ def test_is_vacancy_post_negative():
     assert triggers2 == []
 
 
-@pytest.mark.asyncio
-async def test_generate_draft_reply_with_custom_instruction():
+def test_template_reply_with_custom_instruction():
+    """The template embeds a custom instruction verbatim when provided."""
     profile = {
         "first_name": "Иван",
         "experience_years": 2,
         "bio_summary": "Делаю качественный монтаж.",
         "software_stack": ["After Effects"],
     }
-    reply = await generate_draft_reply(profile, custom_instruction="Скидка 10% на первый заказ")
+    reply = _generate_template_reply(profile, custom_instruction="Скидка 10% на первый заказ")
     assert "📌 Дополнение: Скидка 10% на первый заказ" in reply
     assert "Иван" in reply
 
-    reply_no_custom = await generate_draft_reply(profile)
+    reply_no_custom = _generate_template_reply(profile)
     assert "📌 Дополнение:" not in reply_no_custom
 
 
