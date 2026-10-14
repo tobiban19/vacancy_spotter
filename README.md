@@ -133,3 +133,8 @@ npm run dev
 ```bash
 $env:PYTHONPATH='backend'; python -m pytest backend/tests
 ```
+
+
+## Аудит архитектуры и логирования
+
+Актуальная локальная папка: `D:\Vacancy spotter`. [Аудит от 14 октября 2026 года](docs/audits/2026-10-14-architecture-and-logging.md) содержит ограничения запуска, проверенные проблемы и порядок адресного рефакторинга.
