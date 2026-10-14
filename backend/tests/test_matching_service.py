@@ -261,3 +261,40 @@ async def test_job_card_db_crud(db_repo: DatabaseRepository):
     # 4. Multi-tenant isolation test (another user gets empty list)
     other_user_cards = await db_repo.get_user_job_cards(900002)
     assert len(other_user_cards) == 0
+
+
+def test_freelancer_seeking_work_filtered():
+    """Posts where freelancers seek work or promote portfolios should not be classified as vacancies."""
+    resume_posts = [
+        "Привет всем! Ищу работу видеомонтажёром, опыт 3 года, открыт к предложениям. Портфолио в лс @editor",
+        "Ищу заказы по монтажу Reels/Shorts. Готов выполнить тестовое, возьму заказ недорого!",
+        "Оцените портфолио! Ищу стажировку или проекты по моушн дизайну.",
+    ]
+    for text in resume_posts:
+        is_vac, score, _ = is_vacancy_post(text)
+        assert not is_vac, f"Expected non-vacancy for freelancer self-promo: {text}"
+
+
+@pytest.mark.asyncio
+async def test_is_job_card_duplicate(db_repo: DatabaseRepository):
+    user_id = 900003
+    await db_repo.get_or_create_user({"id": user_id, "first_name": "Dup Tester"})
+
+    card_dto = JobCardCreateDTO(
+        user_id=user_id,
+        channel_title="Python Jobs",
+        channel_username="py_jobs",
+        post_text="Нужен FastAPI разработчик на проект, ставка 150000р.",
+        post_url="https://t.me/py_jobs/999",
+        match_score=0.9,
+    )
+    await db_repo.create_job_card(card_dto)
+
+    # Same URL -> duplicate
+    assert await db_repo.is_job_card_duplicate(user_id, "Другой текст", "https://t.me/py_jobs/999") is True
+
+    # Same text snippet -> duplicate (cross-channel repost)
+    assert await db_repo.is_job_card_duplicate(user_id, "Нужен FastAPI разработчик на проект, ставка 150000р.", "https://t.me/other_ch/1") is True
+
+    # Different text & different URL -> not duplicate
+    assert await db_repo.is_job_card_duplicate(user_id, "Нужен React разработчик на фронтенд", "https://t.me/other_ch/2") is False

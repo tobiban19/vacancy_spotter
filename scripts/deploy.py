@@ -160,7 +160,8 @@ After=network.target
 Type=simple
 User=root
 WorkingDirectory={REMOTE_DIR}
-ExecStart={REMOTE_DIR}/venv/bin/python app.py
+Environment="PYTHONPATH={REMOTE_DIR}/backend"
+ExecStart={REMOTE_DIR}/venv/bin/python backend/server.py
 Restart=always
 RestartSec=10
 EnvironmentFile=-{REMOTE_DIR}/.env

@@ -132,6 +132,7 @@ class DatabaseRepository:
         self._conn.row_factory = aiosqlite.Row
         await self._conn.execute("PRAGMA journal_mode=WAL;")
         await self._conn.execute("PRAGMA foreign_keys=ON;")
+        await self._conn.execute("PRAGMA busy_timeout=5000;")
         await self._init_tables()
         await self._seed_professions_and_channels()
 
@@ -219,6 +220,10 @@ class DatabaseRepository:
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         );
         CREATE INDEX IF NOT EXISTS idx_user_job_cards_user_id ON user_job_cards(user_id);
+        CREATE INDEX IF NOT EXISTS idx_user_job_cards_user_status ON user_job_cards(user_id, status);
+        CREATE INDEX IF NOT EXISTS idx_user_job_cards_user_post ON user_job_cards(user_id, post_url);
+        CREATE INDEX IF NOT EXISTS idx_channels_prof_active ON channels(profession_id, is_active);
+        CREATE INDEX IF NOT EXISTS idx_user_channels_ch_id ON user_channels(channel_id);
 
         CREATE TABLE IF NOT EXISTS pipeline_trace (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -254,13 +259,15 @@ class DatabaseRepository:
 
         await self._conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_channels_prof_user ON channels(profession_id, username);")
         
-        # Additive migration for is_banned & ban_reason
+        # Additive migration for is_banned, ban_reason & regen_waiting_card_id
         columns = await self._conn.execute("PRAGMA table_info(users);")
         existing_cols = {row["name"] for row in await columns.fetchall()}
         if "is_banned" not in existing_cols:
             await self._conn.execute("ALTER TABLE users ADD COLUMN is_banned INTEGER DEFAULT 0;")
         if "ban_reason" not in existing_cols:
             await self._conn.execute("ALTER TABLE users ADD COLUMN ban_reason TEXT DEFAULT NULL;")
+        if "regen_waiting_card_id" not in existing_cols:
+            await self._conn.execute("ALTER TABLE users ADD COLUMN regen_waiting_card_id BIGINT DEFAULT NULL;")
 
         await self._conn.commit()
 
@@ -322,26 +329,47 @@ class DatabaseRepository:
 
     def verify_telegram_init_data(self, init_data_str: str) -> dict[str, Any] | None:
         """Validates Telegram WebApp initData string against BOT_TOKEN using HMAC-SHA256."""
-        try:
-            from urllib.parse import parse_qsl
-            parsed = dict(parse_qsl(init_data_str, keep_blank_values=True))
-            if "hash" not in parsed:
-                return None
-            hash_check = parsed.pop("hash")
-            data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(parsed.items()))
-
-            bot_token = settings.bot_token.get_secret_value()
-            if not bot_token or bot_token == "placeholder_token":
-                return None
-            secret_key = hmac.new(b"WebAppData", bot_token.encode(), hashlib.sha256).digest()
-            calculated_hash = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
-
-            if hmac.compare_digest(calculated_hash, hash_check):
-                user_data = json.loads(parsed.get("user", "{}"))
-                return user_data
-        except Exception:
+        from auth import extract_telegram_user
+        bot_token = settings.bot_token.get_secret_value()
+        if not bot_token or bot_token == "placeholder_token":
             return None
-        return None
+        return extract_telegram_user(init_data_str, bot_token)
+
+    async def set_user_regen_waiting(self, user_id: int, card_id: int | None) -> None:
+        assert self._conn is not None
+        await self._conn.execute(
+            "UPDATE users SET regen_waiting_card_id = ? WHERE id = ?",
+            (card_id, user_id)
+        )
+        await self._conn.commit()
+
+    async def get_user_regen_waiting(self, user_id: int) -> int | None:
+        assert self._conn is not None
+        async with self._conn.execute("SELECT regen_waiting_card_id FROM users WHERE id = ?", (user_id,)) as cursor:
+            row = await cursor.fetchone()
+        if not row or not row["regen_waiting_card_id"]:
+            return None
+        return int(row["regen_waiting_card_id"])
+
+    async def is_job_card_duplicate(self, user_id: int, post_text: str, post_url: str = "", within_hours: int = 24) -> bool:
+        assert self._conn is not None
+        since = (datetime.now(timezone.utc) - timedelta(hours=within_hours)).isoformat()
+        if post_url:
+            async with self._conn.execute(
+                "SELECT id FROM user_job_cards WHERE user_id = ? AND post_url = ? AND created_at >= ? LIMIT 1",
+                (user_id, post_url, since)
+            ) as cursor:
+                if await cursor.fetchone():
+                    return True
+        # Check first 150 chars of normalized text for cross-channel repost duplicates
+        snippet = post_text.strip()[:150]
+        if snippet:
+            async with self._conn.execute(
+                "SELECT id FROM user_job_cards WHERE user_id = ? AND post_text LIKE ? AND created_at >= ? LIMIT 1",
+                (user_id, f"%{snippet}%", since)
+            ) as cursor:
+                return (await cursor.fetchone()) is not None
+        return False
 
     async def get_or_create_user(self, telegram_user: dict[str, Any]) -> tuple[UserProfileDTO, bool]:
         assert self._conn is not None
@@ -929,8 +957,18 @@ class DatabaseRepository:
         async with self._conn.execute(query_sql, queryParams) as cursor:
             async for row in cursor:
                 demo_until_dt = datetime.fromisoformat(row["demo_until"]) if row["demo_until"] else datetime.now(timezone.utc)
-                sub_until_dt = datetime.fromisoformat(row["subscription_until"]) if row["subscription_until"] else None
+                if demo_until_dt.tzinfo is None:
+                    demo_until_dt = demo_until_dt.replace(tzinfo=timezone.utc)
+
+                sub_until_dt = None
+                if row["subscription_until"]:
+                    sub_until_dt = datetime.fromisoformat(row["subscription_until"])
+                    if sub_until_dt.tzinfo is None:
+                        sub_until_dt = sub_until_dt.replace(tzinfo=timezone.utc)
+
                 created_at_dt = datetime.fromisoformat(row["created_at"]) if row["created_at"] else datetime.now(timezone.utc)
+                if created_at_dt.tzinfo is None:
+                    created_at_dt = created_at_dt.replace(tzinfo=timezone.utc)
 
                 users.append(
                     AdminUserDTO(
@@ -1080,11 +1118,13 @@ class DatabaseRepository:
              user_id, card_id, bot_username, bot_token_prefix, detail, now),
         )
         await self._conn.commit()
-        # Auto-prune: keep only latest 500 entries
-        await self._conn.execute(
-            "DELETE FROM pipeline_trace WHERE id NOT IN (SELECT id FROM pipeline_trace ORDER BY id DESC LIMIT 500)"
-        )
-        await self._conn.commit()
+        # Auto-prune periodically (every 20 trace writes) to avoid heavy locks on every event
+        self._trace_write_count = getattr(self, "_trace_write_count", 0) + 1
+        if self._trace_write_count % 20 == 0:
+            await self._conn.execute(
+                "DELETE FROM pipeline_trace WHERE id NOT IN (SELECT id FROM pipeline_trace ORDER BY id DESC LIMIT 500)"
+            )
+            await self._conn.commit()
 
     async def get_traces_by_url(self, url_fragment: str, limit: int = 20) -> list[dict]:
         """Find trace events matching a post URL fragment."""

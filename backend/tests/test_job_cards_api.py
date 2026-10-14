@@ -20,8 +20,11 @@ from database import DatabaseRepository
 from models import JobCardCreateDTO, JobCardStatusEnum
 
 
+from pydantic import SecretStr
+
 @pytest_asyncio.fixture
-async def cards_client(tmp_path):
+async def cards_client(tmp_path, monkeypatch):
+    monkeypatch.setattr("config.settings.openrouter_api_key", SecretStr(""))
     test_db = tmp_path / "test_cards.sqlite3"
     test_repo = DatabaseRepository(test_db)
     await test_repo.open()

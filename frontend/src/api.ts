@@ -128,7 +128,7 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
 function getHeaders(): Record<string, string> {
   const tg = (window as any).Telegram?.WebApp;
-  const initData = tg?.initData || 'dev_mode_965000782';
+  const initData = tg?.initData || '';
   return {
     'Content-Type': 'application/json',
     'Authorization': `Bearer ${initData}`,
@@ -217,7 +217,7 @@ export const api = {
     const formData = new FormData();
     formData.append('file', file);
     const tg = (window as any).Telegram?.WebApp;
-    const initData = tg?.initData || 'dev_mode_965000782';
+    const initData = tg?.initData || '';
     const response = await fetch(`${BASE_URL}/api/profile/parse_pdf`, {
       method: 'POST',
       headers: {

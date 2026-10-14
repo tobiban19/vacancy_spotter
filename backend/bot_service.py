@@ -105,7 +105,10 @@ def get_job_card_keyboard(card_id: int, post_url: str = "") -> InlineKeyboardMar
 
 
 async def send_job_card_to_user(bot: Bot, card: JobCardDTO) -> Message | None:
-    escaped_post_text = html.escape(card.post_text)
+    raw_post = card.post_text
+    if len(raw_post) > 2500:
+        raw_post = raw_post[:2490] + "\n... (текст обрезан)"
+    escaped_post_text = html.escape(raw_post)
     channel_name = html.escape(card.channel_title or card.channel_username)
 
     text = (
@@ -116,7 +119,10 @@ async def send_job_card_to_user(bot: Bot, card: JobCardDTO) -> Message | None:
     )
 
     if card.draft_reply:
-        escaped_draft = html.escape(card.draft_reply)
+        raw_draft = card.draft_reply
+        if len(raw_draft) > 1000:
+            raw_draft = raw_draft[:990] + "..."
+        escaped_draft = html.escape(raw_draft)
         text += f"✍️ <b>Готовый отклик (нажмите, чтобы скопировать):</b>\n<code>{escaped_draft}</code>\n\n"
 
     if card.matched_keywords:
@@ -459,6 +465,10 @@ async def process_rewrite_job_card(query: CallbackQuery) -> None:
 
     profile = await repo.get_user_profile(user_id)
     USER_REGEN_WAITING[user_id] = card_id
+    try:
+        await repo.set_user_regen_waiting(user_id, card_id)
+    except Exception:
+        pass
 
     draft = card.draft_reply
     if not draft or not draft.strip():
@@ -483,7 +493,14 @@ async def process_regen_job_card(query: CallbackQuery) -> None:
     card_id = int(query.data.split(":", 1)[1])
     user_id = query.from_user.id
 
+    if repo._conn is None:
+        await repo.open()
+
     USER_REGEN_WAITING[user_id] = card_id
+    try:
+        await repo.set_user_regen_waiting(user_id, card_id)
+    except Exception:
+        pass
 
     await query.answer()
 
@@ -500,14 +517,19 @@ async def handle_user_text_message(message: Message) -> None:
     if not message.from_user:
         return
     user_id = message.from_user.id
-    if user_id in USER_REGEN_WAITING:
-        card_id = USER_REGEN_WAITING.pop(user_id)
+
+    if repo._conn is None:
+        await repo.open()
+
+    card_id = USER_REGEN_WAITING.pop(user_id, None)
+    if not card_id:
+        card_id = await repo.get_user_regen_waiting(user_id)
+
+    if card_id:
+        await repo.set_user_regen_waiting(user_id, None)
         user_instruction = (message.text or "").strip()
 
         try:
-            if repo._conn is None:
-                await repo.open()
-
             card = await repo.get_job_card_by_id(card_id, user_id)
             profile = await repo.get_user_profile(user_id)
 

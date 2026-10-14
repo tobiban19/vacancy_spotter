@@ -44,7 +44,9 @@ class Settings(BaseSettings):
 
     @property
     def admin_telegram_ids(self) -> list[int]:
-        ids = [self.admin_chat_id, 965000782]
+        ids: list[int] = []
+        if self.admin_chat_id:
+            ids.append(self.admin_chat_id)
         if self.admin_telegram_ids_raw:
             for x in self.admin_telegram_ids_raw.split(","):
                 if x.strip().isdigit():

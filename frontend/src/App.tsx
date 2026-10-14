@@ -215,7 +215,8 @@ export function App() {
       return { title: 'Демо Доступ (2 дня)', status: 'demo', daysLeft: 2, formattedUntil: 'Активен' };
     }
 
-    const targetDate = new Date(targetDateStr);
+    const normalizedDateStr = targetDateStr.endsWith('Z') || targetDateStr.includes('+') ? targetDateStr : `${targetDateStr}Z`;
+    const targetDate = new Date(normalizedDateStr);
     const now = new Date();
     const diffMs = targetDate.getTime() - now.getTime();
     const daysLeft = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
@@ -271,11 +272,7 @@ export function App() {
       setChannels(channelsData || []);
       setProfessions(professionsData || null);
 
-      const tg = (window as any).Telegram?.WebApp;
-      const tgId = tg?.initDataUnsafe?.user?.id;
-      const currentUserId = profileData?.user_id || (tgId ? Number(tgId) : 0);
-      const isAdminUser = Boolean(adminRes?.is_admin) || currentUserId === 965000782 || (tgId && Number(tgId) === 965000782);
-      setIsAdmin(isAdminUser);
+      setIsAdmin(Boolean(adminRes?.is_admin));
     } catch (err: any) {
       console.error('Failed to load initial data:', err);
       setError('Не удалось загрузить данные с сервера');

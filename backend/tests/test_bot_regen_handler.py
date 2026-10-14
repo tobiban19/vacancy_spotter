@@ -19,8 +19,11 @@ from database import DatabaseRepository
 from models import JobCardCreateDTO, JobCardStatusEnum
 
 
+from pydantic import SecretStr
+
 @pytest_asyncio.fixture
-async def test_env(tmp_path):
+async def test_env(tmp_path, monkeypatch):
+    monkeypatch.setattr("config.settings.openrouter_api_key", SecretStr(""))
     test_db = tmp_path / "test_regen.sqlite3"
     test_repo = DatabaseRepository(test_db)
     await test_repo.open()
@@ -162,9 +165,44 @@ async def test_handle_user_text_message_error_handling(test_env):
     with patch("bot_service.generate_draft_reply", side_effect=RuntimeError("AI model error")):
         await bot_service.handle_user_text_message(mock_message)
 
-    # Verify state cleaned up
-    assert user_id not in bot_service.USER_REGEN_WAITING
-
     # Verify error notification sent to user
     mock_message.answer.assert_called_once()
     assert "Ошибка при перегенерации отклика" in mock_message.answer.call_args.args[0]
+
+
+@pytest.mark.asyncio
+async def test_handle_user_text_message_recovers_from_db_on_restart(test_env):
+    """Test that if in-memory cache is wiped (e.g. process restart), state is recovered from DB."""
+    test_repo = test_env
+    user_id = 999005
+    await test_repo.get_or_create_user({"id": user_id, "first_name": "Reboot User"})
+
+    card = await test_repo.create_job_card(
+        JobCardCreateDTO(
+            user_id=user_id,
+            channel_title="Dev Jobs",
+            channel_username="dev_jobs",
+            post_text="Python Backend Dev required",
+        )
+    )
+
+    # Persist in DB, but clear in-memory cache to simulate restart
+    await test_repo.set_user_regen_waiting(user_id, card.id)
+    bot_service.USER_REGEN_WAITING.clear()
+
+    mock_message = MagicMock()
+    mock_message.from_user.id = user_id
+    mock_message.text = "Сделай лаконично"
+    mock_message.answer = AsyncMock()
+
+    await bot_service.handle_user_text_message(mock_message)
+
+    # State in DB must be cleared after processing
+    db_waiting = await test_repo.get_user_regen_waiting(user_id)
+    assert db_waiting is None
+
+    # Card draft updated successfully
+    updated_card = await test_repo.get_job_card_by_id(card.id, user_id)
+    assert "Сделай лаконично" in updated_card.draft_reply
+    mock_message.answer.assert_called_once()
+    assert f"Вакансия #{card.id}" in mock_message.answer.call_args.args[0]

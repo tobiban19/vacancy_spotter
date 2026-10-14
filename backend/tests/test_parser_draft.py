@@ -172,3 +172,41 @@ def test_job_card_create_dto_draft_reply():
     )
     assert dto.draft_reply == draft_text
     assert dto.match_score == 0.7
+
+
+@pytest.mark.asyncio
+async def test_duplicate_vacancy_post_is_skipped(test_env):
+    """Test that a duplicate post within 24h is not resent or recreated."""
+    test_repo = test_env
+    user_id = 999105
+    await test_repo.get_or_create_user({"id": user_id, "first_name": "Тест"})
+
+    text = "Ищу монтажёра для Reels и Shorts! Нужен видеомонтаж, бюджет 5000р. @hr_team"
+    mock_chat = MagicMock()
+    mock_chat.username = "editors_video"
+    mock_chat.title = "Монтажеры | Видеомонтаж"
+
+    mock_event = MagicMock()
+    mock_event.text = text
+    mock_event.id = 701
+    mock_event.get_chat = AsyncMock(return_value=mock_chat)
+
+    with patch("bot_service.send_job_card_to_user", new_callable=AsyncMock) as mock_send, \
+         patch("bot_service.get_bot") as mock_get_bot, \
+         patch("telethon_parser.generate_draft_reply", return_value="Привет"):
+        mock_bot = AsyncMock()
+        mock_bot.get_me = AsyncMock(return_value=MagicMock(username="vacancy_spott_bot"))
+        mock_get_bot.return_value = mock_bot
+        mock_send.return_value = MagicMock()
+
+        # First delivery -> succeeds
+        await telethon_parser.handle_new_channel_post(mock_event)
+        cards = await test_repo.get_user_job_cards(user_id)
+        assert len(cards) == 1
+        assert mock_send.call_count == 1
+
+        # Second delivery of the identical post -> deduplicated and skipped
+        await telethon_parser.handle_new_channel_post(mock_event)
+        cards_after = await test_repo.get_user_job_cards(user_id)
+        assert len(cards_after) == 1  # No duplicate card created
+        assert mock_send.call_count == 1  # No duplicate message sent

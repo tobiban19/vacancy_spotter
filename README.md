@@ -113,17 +113,17 @@ npm run dev
 
 ## 📚 Документация Модулей Проекта
 
-Подробная полная техническая спецификация всех API endpoints, структуры БД и сервисов доступна в файле [`docs/TECHNICAL_DOCS.md`](file:///c:/Users/ptimo/Documents/antigravity/vacancy-spotter-app/docs/TECHNICAL_DOCS.md).
+Подробная полная техническая спецификация всех API endpoints, структуры БД и сервисов доступна в файле [`docs/TECHNICAL_DOCS.md`](docs/TECHNICAL_DOCS.md).
 
 ### Ключевые компоненты:
-1. [`app.py`](file:///c:/Users/ptimo/Documents/antigravity/vacancy-spotter-app/app.py): Главный единый точка входа для запуска FastAPI, Telegram-бота, MTProto парсера и интерфейса Gradio.
-2. [`backend/api.py`](file:///c:/Users/ptimo/Documents/antigravity/vacancy-spotter-app/backend/api.py): REST API для Mini App (авторизация через `initData` HMAC, профиль, портфолио, каналы, карточки вакансий, панель администратора).
-3. [`backend/bot_service.py`](file:///c:/Users/ptimo/Documents/antigravity/vacancy-spotter-app/backend/bot_service.py): Логика Telegram-бота (команды `/start`, `/status`, `/help`, `/debug`, генерация откликов, подписки, перегенерация через `USER_REGEN_WAITING`).
-4. [`backend/matching_service.py`](file:///c:/Users/ptimo/Documents/antigravity/vacancy-spotter-app/backend/matching_service.py): Классификатор интента коммерческих вакансий (`is_vacancy_post`) и генератор ИИ-откликов через OpenRouter (`async generate_draft_reply`), учитывающий текст вакансии, профиль и пользовательские пожелания. При отсутствии `OPENROUTER_API_KEY` используется локальный шаблонный fallback.
-5. [`backend/telethon_parser.py`](file:///c:/Users/ptimo/Documents/antigravity/vacancy-spotter-app/backend/telethon_parser.py): MTProto парсер каналов Telegram в реальном времени с фильтрацией интентов и автосозданием откликов.
-6. [`backend/database.py`](file:///c:/Users/ptimo/Documents/antigravity/vacancy-spotter-app/backend/database.py): Репозиторий базы данных SQLite на `aiosqlite`.
-7. [`frontend/src/App.tsx`](file:///c:/Users/ptimo/Documents/antigravity/vacancy-spotter-app/frontend/src/App.tsx): Главное клиентское приложение Telegram Mini App.
-8. [`scripts/deploy.py`](file:///c:/Users/ptimo/Documents/antigravity/vacancy-spotter-app/scripts/deploy.py): Автоматический скрипт деплоя с pre-flight валидацией (npm build + pytest + git push + vercel deploy + VPS systemd deployment). Параметры подключения к VPS берутся из переменных окружения (`VPS_HOST`, `VPS_USER`, `VPS_PASSWORD`).
+1. [`app.py`](app.py): Главный единый точка входа для запуска FastAPI, Telegram-бота, MTProto парсера и интерфейса Gradio.
+2. [`backend/api.py`](backend/api.py): REST API для Mini App (авторизация через `initData` HMAC, профиль, портфолио, каналы, карточки вакансий, панель администратора).
+3. [`backend/bot_service.py`](backend/bot_service.py): Логика Telegram-бота (команды `/start`, `/status`, `/help`, `/debug`, генерация откликов, подписки, перегенерация через `USER_REGEN_WAITING`).
+4. [`backend/matching_service.py`](backend/matching_service.py): Классификатор интента коммерческих вакансий (`is_vacancy_post`) и генератор ИИ-откликов через OpenRouter (`async generate_draft_reply`), учитывающий текст вакансии, профиль и пользовательские пожелания. При отсутствии `OPENROUTER_API_KEY` используется локальный шаблонный fallback.
+5. [`backend/telethon_parser.py`](backend/telethon_parser.py): MTProto парсер каналов Telegram в реальном времени с фильтрацией интентов и автосозданием откликов.
+6. [`backend/database.py`](backend/database.py): Репозиторий базы данных SQLite на `aiosqlite`.
+7. [`frontend/src/App.tsx`](frontend/src/App.tsx): Главное клиентское приложение Telegram Mini App.
+8. [`scripts/deploy.py`](scripts/deploy.py): Автоматический скрипт деплоя с pre-flight валидацией (npm build + pytest + git push + vercel deploy + VPS systemd deployment). Параметры подключения к VPS берутся из переменных окружения (`VPS_HOST`, `VPS_USER`, `VPS_PASSWORD`).
 
 ---
 

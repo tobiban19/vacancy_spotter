@@ -188,6 +188,17 @@ async def handle_new_channel_post(event: events.NewMessage.Event):
                 )
                 continue
 
+            # Deduplication check: prevent duplicate job cards for same user within 24 hours
+            if await repo.is_job_card_duplicate(u.user_id, event.text, post_url):
+                log.info("[TRACE:%s] 🔁 duplicate_filtered | user %s", trace_id, u.user_id)
+                await _safe_log_trace(
+                    trace_id, "duplicate_filtered",
+                    channel=f"@{username}", post_url=post_url,
+                    user_id=u.user_id, bot_username=bot_uname, bot_token_prefix=token_pfx,
+                    detail="Duplicate post detected (already sent in last 24h)",
+                )
+                continue
+
             draft = await generate_draft_reply(u, event.text)
 
             card_create = JobCardCreateDTO(

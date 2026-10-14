@@ -237,10 +237,14 @@ async def parse_resume_pdf(
     file: UploadFile = File(...),
     user_id: Annotated[int, Depends(get_current_user_id)] = None,
 ):
-    if not file.filename.lower().endswith(".pdf"):
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Только файлы формата PDF")
-    
-    content = await file.read()
+
+    max_size = 10 * 1024 * 1024  # 10 MB limit
+    content = await file.read(max_size + 1)
+    if len(content) > max_size:
+        raise HTTPException(status_code=400, detail="Размер файла превышает 10 МБ")
+
     try:
         reader = pypdf.PdfReader(io.BytesIO(content))
         text_pages = []
@@ -251,9 +255,11 @@ async def parse_resume_pdf(
         extracted_text = "\n".join(text_pages).strip()
         if not extracted_text:
             raise HTTPException(status_code=400, detail="Не удалось извлечь текст из PDF. Возможно, это скан-изображение.")
-        
+
         cleaned = "\n".join([line.strip() for line in extracted_text.splitlines() if line.strip()])
         return {"extracted_text": cleaned[:2000]}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Ошибка чтения PDF: {str(e)}")
 
@@ -435,6 +441,7 @@ async def request_subscription_card(
             logging.getLogger("fastapi").error("Failed to decode receipt_file_b64: %s", exc)
 
     try:
+        safe_caption = text[:990] + "..." if len(text) > 1000 else text
         if receipt_file and dto.receipt_filename:
             fn_lower = dto.receipt_filename.lower()
             is_image = any(fn_lower.endswith(ext) for ext in (".png", ".jpg", ".jpeg", ".webp", ".gif"))
@@ -442,7 +449,7 @@ async def request_subscription_card(
                 await bot.send_photo(
                     chat_id=admin_id,
                     photo=receipt_file,
-                    caption=text,
+                    caption=safe_caption,
                     parse_mode=ParseMode.HTML,
                     reply_markup=keyboard,
                 )
@@ -450,7 +457,7 @@ async def request_subscription_card(
                 await bot.send_document(
                     chat_id=admin_id,
                     document=receipt_file,
-                    caption=text,
+                    caption=safe_caption,
                     parse_mode=ParseMode.HTML,
                     reply_markup=keyboard,
                 )
@@ -516,6 +523,9 @@ async def process_incoming_job(
         # Check stop words filter (case-insensitive)
         post_lower = req.post_text.lower()
         if any(sw.strip() and sw.strip().lower() in post_lower for sw in u.stop_words if sw):
+            continue
+
+        if await repo.is_job_card_duplicate(u.user_id, req.post_text, req.post_url):
             continue
 
         clean_ch = req.channel_username.strip().replace("https://t.me/", "").replace("@", "")

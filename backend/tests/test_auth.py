@@ -115,3 +115,21 @@ def test_jwt_token_has_expiry():
     assert "exp" in payload
     assert "iat" in payload
     assert int(payload["sub"]) == 965000782
+
+
+def test_verify_telegram_init_data_replay_protection():
+    import time
+    user = {"id": 965000782, "first_name": "TestUser"}
+    now = int(time.time())
+
+    # Fresh token -> valid
+    fresh_init_data = generate_init_data(TEST_BOT_TOKEN, user, auth_date=now - 10)
+    assert verify_telegram_init_data(fresh_init_data, TEST_BOT_TOKEN, max_age_seconds=86400) is not None
+
+    # Stale token (> 24h old) -> rejected when max_age_seconds=86400
+    stale_init_data = generate_init_data(TEST_BOT_TOKEN, user, auth_date=now - 100000)
+    assert verify_telegram_init_data(stale_init_data, TEST_BOT_TOKEN, max_age_seconds=86400) is None
+
+    # Future token (> 5 min ahead) -> rejected
+    future_init_data = generate_init_data(TEST_BOT_TOKEN, user, auth_date=now + 1000)
+    assert verify_telegram_init_data(future_init_data, TEST_BOT_TOKEN, max_age_seconds=86400) is None

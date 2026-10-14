@@ -7,7 +7,7 @@
    - Это гарантирует своевременную проверку логов и исключает подвисание задач без контроля.
 
 2. **Документация и архитектура**:
-   - Поддерживать документацию [`README.md`](file:///c:/Users/ptimo/Documents/antigravity/vacancy-spotter-app/README.md) и [`docs/TECHNICAL_DOCS.md`](file:///c:/Users/ptimo/Documents/antigravity/vacancy-spotter-app/docs/TECHNICAL_DOCS.md) в актуальном состоянии при любом изменении контрактов API, БД или бота.
+   - Поддерживать документацию [`README.md`](README.md) и [`docs/TECHNICAL_DOCS.md`](docs/TECHNICAL_DOCS.md) в актуальном состоянии при любом изменении контрактов API, БД или бота.
 
 3. **Тестирование перед завершением**:
    - Обязательно прогонять юнит-тесты (`pytest backend/tests`) перед заявлением о завершении задач.
